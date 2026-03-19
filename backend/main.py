@@ -12,6 +12,9 @@ from aegis_engine import AegisEngine, ABAC_POLICIES
 
 LOG_FILE = Path("aegis_audit.log")
 
+# Static files location (built React app)
+STATIC_DIR = Path(__file__).parent / "static"
+
 app = FastAPI(title="TARE AEGIS-ID")
 app.add_middleware(
     CORSMiddleware,
@@ -469,3 +472,20 @@ def clear_logs():
     with open(LOG_FILE, "w") as f:
         f.write("")
     return {"status": "cleared"}
+
+
+# ---------------------------------------------------------------------------
+# Serve built React frontend (static files)
+# ---------------------------------------------------------------------------
+@app.get("/")
+def serve_root():
+    return FileResponse(str(STATIC_DIR / "index.html"))
+
+@app.get("/{full_path:path}")
+def serve_spa(full_path: str):
+    """Serve static assets; fall back to index.html for SPA routing."""
+    file_path = STATIC_DIR / full_path
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    return FileResponse(str(STATIC_DIR / "index.html"))
+
