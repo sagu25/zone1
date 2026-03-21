@@ -1,189 +1,189 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import Header from './components/Header'
-import AgentPanel from './components/AgentPanel'
-import GridDiagram from './components/GridDiagram'
-import ThreatStats from './components/ThreatStats'
-import ActivityFeed from './components/ActivityFeed'
-import ThreatAlert from './components/ThreatAlert'
+import Header        from './components/Header'
+import OperatorAgent from './components/OperatorAgent'
+import CommandGateway from './components/CommandGateway'
+import ZoneObservatory from './components/ZoneObservatory'
+import TAREResponse  from './components/TAREResponse'
+import ServiceNowCard from './components/ServiceNowCard'
+import ChatAssistant from './components/ChatAssistant'
+import ActivityFeed  from './components/ActivityFeed'
 
-const WS_URL = 'ws://localhost:8003/ws'
+const WS_URL = `ws://${window.location.hostname}:${window.location.port}/ws`
 
-const INITIAL_AGENTS = {
-  'GridMonitor-Alpha':  { name: 'GridMonitor-Alpha',  role: 'GRID_MONITOR',   clearance: 'LEVEL_3', clearance_num: 3, department: 'Grid Operations', status: 'INACTIVE', allowed_actions: ['READ_TELEMETRY','READ_GRID_STATUS'],            fingerprint: 'fp_gma_a3f9c2', action_count: 0, last_action: null, last_result: null },
-  'LoadBalancer-Beta':  { name: 'LoadBalancer-Beta',  role: 'LOAD_BALANCER',  clearance: 'LEVEL_4', clearance_num: 4, department: 'Grid Operations', status: 'INACTIVE', allowed_actions: ['READ_TELEMETRY','ADJUST_LOAD','READ_GRID_STATUS'], fingerprint: 'fp_lbb_d7e1a5', action_count: 0, last_action: null, last_result: null },
-  'FaultDetector-Gamma':{ name: 'FaultDetector-Gamma',role: 'FAULT_DETECTOR', clearance: 'LEVEL_3', clearance_num: 3, department: 'Maintenance',     status: 'INACTIVE', allowed_actions: ['READ_TELEMETRY','LOG_FAULT','READ_GRID_STATUS'],   fingerprint: 'fp_fdg_b2c8e4', action_count: 0, last_action: null, last_result: null },
+const INITIAL_STATE = {
+  mode:           'NORMAL',
+  previous_mode:  null,
+  mode_changed_at:null,
+  zones:  {
+    Z1: { id:'Z1', name:'Zone 1 — North Grid', health:'HEALTHY', fault:null, color:'green' },
+    Z2: { id:'Z2', name:'Zone 2 — East Grid',  health:'HEALTHY', fault:null, color:'green' },
+    Z3: { id:'Z3', name:'Zone 3 — West Grid',  health:'FAULT',   fault:'Voltage fluctuation — feeder instability detected', color:'red' },
+  },
+  assets: {
+    'BRK-301':{ id:'BRK-301', type:'BREAKER', zone:'Z3', state:'CLOSED',  description:'Main Circuit Breaker Z3' },
+    'FDR-301':{ id:'FDR-301', type:'FEEDER',  zone:'Z3', state:'RUNNING', description:'Feeder Controller Z3' },
+    'BRK-205':{ id:'BRK-205', type:'BREAKER', zone:'Z2', state:'CLOSED',  description:'Main Circuit Breaker Z2' },
+    'FDR-205':{ id:'FDR-205', type:'FEEDER',  zone:'Z2', state:'RUNNING', description:'Feeder Controller Z2' },
+    'BRK-110':{ id:'BRK-110', type:'BREAKER', zone:'Z1', state:'CLOSED',  description:'Main Circuit Breaker Z1' },
+    'FDR-110':{ id:'FDR-110', type:'FEEDER',  zone:'Z1', state:'RUNNING', description:'Feeder Controller Z1' },
+  },
+  agent: {
+    id:'OP-GRID-7749', name:'GridOperator-Agent', role:'GRID_OPERATOR',
+    clearance:'LEVEL_3', department:'Grid Operations', rbac_zones:['Z3'],
+    status:'ACTIVE', action_count:0, last_command:null, last_result:null,
+  },
+  gateway_log:      [],
+  zone_access_log:  [],
+  anomaly_signals:  [],
+  anomaly_score:    0,
+  active_incident:  null,
+  stats:            { total:0, allowed:0, denied:0, freeze_events:0 },
+  timebox_remaining:null,
+  timebox_total:    0,
 }
 
-let feedCounter = 0
+let feedId = 0
+function mkFeed(level, source, message) {
+  return { id: ++feedId, level, source, message, ts: new Date().toISOString() }
+}
 
 export default function App() {
-  const [wsConnected, setWsConnected]         = useState(false)
-  const [agents, setAgents]                   = useState(INITIAL_AGENTS)
-  const [feedItems, setFeedItems]             = useState([])
-  const [threatCount, setThreatCount]         = useState(0)
-  const [riskScore, setRiskScore]             = useState(0)
-  const [activeIncidents, setActiveIncidents] = useState(0)
-  const [alertData, setAlertData]             = useState(null)   // covers both rogue + behavioral
-  const [demoRunning, setDemoRunning]         = useState(false)
-  const [stepText, setStepText]               = useState('')
-  const [abacPolicies, setAbacPolicies]       = useState([])
-  const [gridState, setGridState]             = useState({
-    substations: { SUB_NORTH: 'normal', SUB_EAST: 'normal', SUB_WEST: 'normal' },
-    flowLines:   { NORTH_EAST: false, NORTH_WEST: false, EAST_WEST: false },
-    cb7Status:   'CLOSED',
-  })
+  const [snap,        setSnap]        = useState(INITIAL_STATE)
+  const [chatMsgs,    setChatMsgs]    = useState([])
+  const [feedItems,   setFeedItems]   = useState([])
+  const [wsConnected, setWsConnected] = useState(false)
+  const [showApprove, setShowApprove] = useState(false)
   const wsRef = useRef(null)
 
-  const addFeedItem = useCallback((level, agentName, message) => {
-    feedCounter++
-    const id = feedCounter
-    setFeedItems(prev => [{ id, level, agentName, message, timestamp: new Date().toISOString() }, ...prev].slice(0, 200))
+  const addFeed = useCallback((level, source, message) => {
+    setFeedItems(prev => [mkFeed(level, source, message), ...prev].slice(0, 300))
   }, [])
 
-  const handleMessage = useCallback((msg) => {
-    if (msg.snapshot) {
-      const snap = msg.snapshot
-      setThreatCount(snap.stats?.total_threats ?? 0)
-      setRiskScore(snap.risk_score ?? 0)
-      if (snap.agents) {
-        setAgents(prev => {
-          const next = { ...prev }
-          snap.agents.forEach(a => { if (next[a.name]) next[a.name] = { ...next[a.name], ...a } })
-          return next
-        })
-      }
-    }
-
+  const handleMsg = useCallback((msg) => {
     switch (msg.type) {
 
-      case 'INIT':
-        if (msg.abac_policies) setAbacPolicies(msg.abac_policies)
+      case 'STATE_SNAPSHOT':
+        setSnap(msg)
         break
 
-      case 'SIMULATION_RESET':
-        setAgents(INITIAL_AGENTS)
+      case 'RESET':
+        setSnap(INITIAL_STATE)
+        setChatMsgs([])
         setFeedItems([])
-        setThreatCount(0)
-        setRiskScore(0)
-        setActiveIncidents(0)
-        setAlertData(null)
-        setDemoRunning(false)
-        setStepText('')
-        setGridState({ substations: { SUB_NORTH:'normal', SUB_EAST:'normal', SUB_WEST:'normal' }, flowLines:{ NORTH_EAST:false, NORTH_WEST:false, EAST_WEST:false }, cb7Status:'CLOSED' })
-        addFeedItem('info', 'AEGIS-ID', 'System reset. Awaiting demo.')
+        setShowApprove(false)
+        addFeed('info', 'TARE', msg.message)
         break
 
-      case 'DEMO_STEP':
-        setStepText(msg.description)
-        addFeedItem('info', 'SYSTEM', msg.description)
-        setDemoRunning(true)
-        break
-
-      case 'AGENT_REGISTERED':
-        if (msg.success) {
-          setAgents(prev => ({ ...prev, [msg.agent_name]: { ...(prev[msg.agent_name]||{}), status:'ACTIVE', session_id: msg.session_id } }))
-          setGridState(prev => ({ ...prev, flowLines:{ NORTH_EAST:true, NORTH_WEST:true, EAST_WEST:true } }))
-          addFeedItem('info', msg.agent_name, `Authenticated · Session [${msg.session_id}] · Fingerprint verified`)
-        } else {
-          addFeedItem('danger', msg.agent_name, `BLOCKED — ${msg.anomalies?.join(', ')}`)
-        }
-        break
-
-      case 'AGENT_ACTION': {
-        const lvl = msg.result === 'ALLOW' ? 'info' : 'danger'
-        const prefix = msg.behavioral ? '🧠 BEHAVIORAL CHECK — ' : ''
-        addFeedItem(lvl, msg.agent_name, `${prefix}${msg.action} → ${msg.resource} [${msg.result}] · ${msg.result === 'ALLOW' ? msg.policy_id : msg.reason}`)
-        if (msg.result === 'ALLOW') {
-          setGridState(prev => ({ ...prev, substations:{ ...prev.substations, [msg.resource]:'active' }, flowLines:{ NORTH_EAST:true, NORTH_WEST:true, EAST_WEST:true } }))
-        }
+      case 'GATEWAY_DECISION': {
+        const lvl = msg.decision === 'ALLOW' ? 'info' : 'danger'
+        const sigStr = msg.signals?.length ? ` [${msg.signals.map(s=>s.signal).join('+')}]` : ''
+        addFeed(lvl, 'GATEWAY', `${msg.command} → ${msg.asset_id} [${msg.decision}] ${msg.reason}${sigStr}`)
         break
       }
 
-      case 'ROGUE_INCOMING':
-        addFeedItem('warning', 'AEGIS-ID', msg.message)
-        setStepText(msg.message)
+      case 'TARE_RESPONSE':
+        addFeed('danger', 'TARE', `${msg.action} — ${msg.message}`)
         break
 
-      case 'BEHAVIORAL_INCOMING':
-        addFeedItem('warning', 'AEGIS-ID', msg.message)
-        setStepText(msg.message)
-        setAgents(prev => ({ ...prev, [msg.agent_name]: { ...(prev[msg.agent_name]||{}), status:'SUSPICIOUS' } }))
+      case 'SERVICENOW_INCIDENT':
+        addFeed('warning', 'ServiceNow', `Incident created: ${msg.incident?.incident_id}`)
         break
 
-      case 'ROGUE_DETECTED':
-        setAlertData({ ...msg, alertType: 'IDENTITY_THEFT' })
-        setActiveIncidents(i => i + 1)
-        setGridState(prev => ({ ...prev, substations:{ ...prev.substations, SUB_NORTH:'threat' }, cb7Status:'BLOCKED' }))
-        setAgents(prev => ({ ...prev, 'GridMonitor-Alpha':{ ...prev['GridMonitor-Alpha'], status:'ROGUE' } }))
-        addFeedItem('danger', 'AEGIS-ID', `IDENTITY THEFT BLOCKED · Rogue impersonating GridMonitor-Alpha · TRIP_BREAKER CB-7 prevented · 50,000 customers protected`)
-        setDemoRunning(false)
+      case 'CHAT_MESSAGE':
+        setChatMsgs(prev => [...prev, { role: msg.role, text: msg.message, ts: new Date().toISOString() }])
+        if (msg.show_approve) setShowApprove(true)
+        if (msg.show_approve === false) setShowApprove(false)
         break
 
-      case 'BEHAVIORAL_ANOMALY':
-        setAlertData({ ...msg, alertType: 'BEHAVIORAL_ANOMALY' })
-        setActiveIncidents(i => i + 1)
-        setGridState(prev => ({ ...prev, substations:{ ...prev.substations, SUB_NORTH:'threat' } }))
-        setAgents(prev => ({ ...prev, 'LoadBalancer-Beta':{ ...prev['LoadBalancer-Beta'], status:'ANOMALOUS' } }))
-        addFeedItem('danger', 'AEGIS-ID', `BEHAVIORAL ANOMALY BLOCKED · LoadBalancer-Beta valid credentials but pattern score ${msg.anomaly_score}/100 > threshold 60 · Session quarantined · 35,000 customers protected`)
-        setDemoRunning(false)
+      case 'TIMEBOX_APPROVED':
+        setShowApprove(false)
+        addFeed('info', 'TARE', `Time-box approved — ${msg.duration_minutes}min window active`)
         break
 
-      case 'THREAT_UPDATE':
-        setThreatCount(msg.total_threats ?? 0)
-        setRiskScore(msg.risk_score ?? 0)
-        setActiveIncidents(msg.active_incidents ?? 0)
+      case 'TIMEBOX_TICK':
+        setSnap(prev => ({ ...prev, timebox_remaining: msg.remaining_seconds }))
         break
 
-      case 'AGENT_DEREGISTERED':
-        addFeedItem('info', 'AEGIS-ID', `Session terminated: ${msg.agent_name}`)
-        setDemoRunning(false)
-        // Reset substation after rogue/anomaly cleared
-        setGridState(prev => ({ ...prev, substations:{ ...prev.substations, SUB_NORTH:'active' } }))
+      case 'TIMEBOX_EXPIRED':
+        addFeed('warning', 'TARE', msg.message)
         break
 
       default:
         break
     }
-  }, [addFeedItem])
+  }, [addFeed])
 
   useEffect(() => {
-    let ws, reconnectTimer
+    let ws, timer
     const connect = () => {
       ws = new WebSocket(WS_URL)
       wsRef.current = ws
-      ws.onopen    = () => { setWsConnected(true);  addFeedItem('info', 'AEGIS-ID', 'WebSocket connected. System online.') }
-      ws.onclose   = () => { setWsConnected(false); reconnectTimer = setTimeout(connect, 3000) }
+      ws.onopen    = () => { setWsConnected(true);  addFeed('info', 'TARE', 'System online — WebSocket connected.') }
+      ws.onclose   = () => { setWsConnected(false); timer = setTimeout(connect, 3000) }
       ws.onerror   = () => ws.close()
-      ws.onmessage = (e) => { try { handleMessage(JSON.parse(e.data)) } catch {} }
+      ws.onmessage = (e) => { try { handleMsg(JSON.parse(e.data)) } catch {} }
     }
     connect()
-    return () => { clearTimeout(reconnectTimer); ws?.close() }
-  }, [handleMessage])
+    return () => { clearTimeout(timer); ws?.close() }
+  }, [handleMsg])
 
-  const sendCommand = (command) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ command }))
-      if (command !== 'RESET') setDemoRunning(true)
+  const post = (path) => fetch(path, { method:'POST' })
+
+  // Scale to fit any screen
+  const layoutRef = useRef(null)
+  useEffect(() => {
+    const scale = () => {
+      const el = layoutRef.current
+      if (!el) return
+      const s = Math.min(window.innerWidth / 1440, window.innerHeight / 810)
+      el.style.transform = `scale(${s})`
+      el.style.marginLeft = `${(window.innerWidth  - 1440 * s) / 2}px`
+      el.style.marginTop  = `${(window.innerHeight - 810  * s) / 2}px`
     }
-  }
+    scale()
+    window.addEventListener('resize', scale)
+    return () => window.removeEventListener('resize', scale)
+  }, [])
 
   return (
-    <div className="app-layout">
-      <Header
-        wsConnected={wsConnected}
-        threatCount={threatCount}
-        stepText={stepText}
-        demoRunning={demoRunning}
-        onStartDemo={()    => sendCommand('START_DEMO')}
-        onLaunchRogue={()  => sendCommand('LAUNCH_ROGUE')}
-        onLaunchBehavioral={()=> sendCommand('LAUNCH_BEHAVIORAL')}
-        onReset={()        => sendCommand('RESET')}
-      />
-      <AgentPanel agents={Object.values(agents)} />
-      <GridDiagram gridState={gridState} />
-      <ThreatStats threatCount={threatCount} riskScore={riskScore} activeIncidents={activeIncidents} abacPolicies={abacPolicies} />
-      <ActivityFeed feedItems={feedItems} />
-      {alertData && <ThreatAlert alert={alertData} onDismiss={() => setAlertData(null)} />}
+    <div className="app-root">
+      <div className="app-layout" ref={layoutRef}>
+        <Header
+          wsConnected={wsConnected}
+          mode={snap.mode}
+          stats={snap.stats}
+          timeboxRemaining={snap.timebox_remaining}
+          timeboxTotal={snap.timebox_total}
+          onNormal={()  => post('/demo/normal')}
+          onAnomal={()  => post('/demo/anomaly')}
+          onReset={()   => post('/reset')}
+        />
+
+        <div className="main-grid">
+          {/* LEFT COL */}
+          <div className="col-left">
+            <OperatorAgent agent={snap.agent} />
+            <TAREResponse  mode={snap.mode} signals={snap.anomaly_signals} score={snap.anomaly_score} />
+            <ServiceNowCard incident={snap.active_incident} />
+          </div>
+
+          {/* CENTRE COL */}
+          <div className="col-centre">
+            <ZoneObservatory zones={snap.zones} assets={snap.assets} accessLog={snap.zone_access_log} />
+            <CommandGateway  log={snap.gateway_log} />
+          </div>
+
+          {/* RIGHT COL */}
+          <div className="col-right">
+            <ChatAssistant
+              messages={chatMsgs}
+              showApprove={showApprove}
+              onApprove={() => post('/approve/timebox')}
+            />
+            <ActivityFeed feedItems={feedItems} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
