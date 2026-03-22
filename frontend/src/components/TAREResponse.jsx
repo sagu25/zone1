@@ -2,7 +2,7 @@ const MODES = [
   { key:'NORMAL',        label:'Normal',        icon:'◉', desc:'Full access within RBAC policy' },
   { key:'FREEZE',        label:'Freeze',         icon:'❄', desc:'High-impact ops halted immediately' },
   { key:'DOWNGRADE',     label:'Downgrade',      icon:'▼', desc:'Read-only + diagnostics only' },
-  { key:'TIMEBOX_ACTIVE',label:'Time-Box',       icon:'⏱', desc:'Switching re-enabled for 10 min' },
+  { key:'TIMEBOX_ACTIVE',label:'Time-Box',       icon:'⏱', desc:'Switching re-enabled for 3 min' },
   { key:'SAFE',          label:'Safe',           icon:'✓', desc:'Constrained — awaiting operator review' },
 ]
 

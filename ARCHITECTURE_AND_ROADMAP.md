@@ -1,5 +1,6 @@
 # TARE AEGIS-ID — Architecture, POC Mapping & Future Roadmap
-### Autonomous Entity Grid Identity System — Energy & Utilities Security Platform
+### Trusted Access Response Engine · Energy & Utilities Security Platform
+*Internal Use Only*
 
 ---
 
@@ -7,340 +8,289 @@
 
 Energy & Utilities environments are increasingly running AI agents that perform
 critical operations — reading grid telemetry, adjusting load, detecting faults,
-issuing maintenance commands. These agents operate 24/7 with minimal human
-oversight.
+issuing maintenance commands. These agents operate autonomously with minimal
+human oversight.
 
 The threat is not just external hackers. It is:
 
-- A compromised agent with stolen credentials
-- A legitimate agent that has been hijacked and is now behaving differently
-- A rogue agent impersonating a trusted one
-- A service account doing something it has never done before
+- A compromised agent with stolen credentials behaving maliciously
+- A legitimate agent that has been hijacked mid-session
+- A rogue agent impersonating a trusted one with a forged token
+- An agent operating outside its authorised zone with valid credentials
 
 Traditional IAM systems stop at the login gate. Once an identity is verified,
-the agent is trusted. AEGIS-ID adds the layer that comes after — continuous
-verification of behavior, not just identity.
+the agent is trusted. **TARE adds the layer that comes after** — continuous
+verification of behaviour, not just identity.
+
+> The key insight: an AI agent with completely valid credentials can still
+> be a security threat. TARE catches it post-grant, through behaviour.
 
 ---
 
-## 2. The Three Architecture Diagrams — What They Show
-
----
-
-### Diagram 1 — High Level Flow (aegisid.png)
+## 2. System Architecture
 
 ```
-Identity Signals
-      │
-      ▼
-Log Ingestion (Log Connector → SIEM / Central Log Store)
-      │
-      ▼
-Identity Behavior AI
-  ├── Anomaly Detection (Time, Location, Access Pattern)
-  └── Baseline Learning (Normal Login Behavior)
-      │
-      ▼
-Risk Scoring for User Sessions
-      │
-      ▼
-Response
-  ├── Step-up MFA / Temporary Access Restriction
-  ├── Security Alert to SOC
-  └── SOC Analyst Review and Validation
+┌─────────────────────────────────────────────────────────────────┐
+│                         ACTORS                                  │
+│                                                                 │
+│  Operator Agent          Supervisor          SOC Analyst        │
+│  (LangChain + Groq)      (approve/deny)      (evidence)         │
+│  RBAC token + command    ↕                   ↕                  │
+└──────────────┬───────────────────────────────────────────────── ┘
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              COMMAND GATEWAY (Policy Enforcement Point)         │
+│                                                                 │
+│   Gateway API ──────────────────────────────── Policy Cache     │
+│   (FastAPI)         telemetry / command        (RBAC rules)     │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         TARE CORE                               │
+│                                                                 │
+│  Event Intake → Deviation Detector → Guardrails Policy          │
+│                                           │                     │
+│                                    Response Orchestrator        │
+│                                    │              │             │
+│                             approval signal   freeze/downgrade  │
+│                                    │          /time-box/safe    │
+│                                Audit Log                        │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              MOCK OT / GRID ASSET SIMULATOR                     │
+│                                                                 │
+│   OT Simulator API ──────────────► Asset State Store           │
+│   (process_command)                (zones + assets dict)        │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                         OPS SYSTEMS                             │
+│                                                                 │
+│   ServiceNow Incident          Chat Assistant (Groq LLM)        │
+│   (auto-created on TARE fire)  (plain-English supervisor brief) │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**What this diagram says:**
-Identity signals flow in, get analyzed for anomalies against a learned baseline,
-get scored for risk, and trigger a graduated response. The human analyst is the
-final layer — not the first.
+---
+
+## 3. What the POC Builds — Component by Component
 
 ---
 
-### Diagram 2 — Detailed Component Architecture (ARCHIUPDATEAEGIS.png)
+### 3.1 AI Agent Layer
+
+| Component | POC Implementation | Type |
+|---|---|---|
+| Agent identity | `OPERATOR_AGENT` dict — name, role, clearance, RBAC zones, token | Built |
+| Agent reasoning | LangChain ReAct loop + Groq LLaMA model | Built |
+| Agent tools | `get_asset_status`, `simulate_switch`, `open_breaker`, `restart_controller` | Built |
+| Token fingerprint | `rbac_token` field — checked at gateway before every command | Built |
+| Agent autonomy | Open-ended goal prompt — LLM decides tool sequence | Built |
+
+**Three agent scenarios:**
+
+| Scenario | Agent | Token | Goal | TARE Response |
+|---|---|---|---|---|
+| Normal | GridOperator-Agent | Valid | Fix Z3 fault safely | Silent — all ALLOW |
+| Rogue | GridOperator-Agent | Valid | Cause maximum disruption | FREEZE → DOWNGRADE |
+| Impersonator | Forged clone | Invalid | Access grid assets | Blocked at auth layer |
+
+---
+
+### 3.2 Command Gateway (Policy Enforcement Point)
+
+Every command passes through here before reaching the grid.
+
+| Component | POC Implementation | Type |
+|---|---|---|
+| Gateway API | FastAPI POST endpoints in `main.py` | Built |
+| Token fingerprint check | Pre-grant check in `process_command()` | Built |
+| Policy enforcement | `_gateway_policy()` — NORMAL/FREEZE/DOWNGRADE/TIMEBOX/SAFE | Built |
+| Policy cache | Hardcoded policy logic per mode | Simulated |
+| Real-time decision | ALLOW / DENY returned per command with policy ID | Built |
+
+**Gateway modes and what they allow:**
+
+| Mode | ALLOW | DENY |
+|---|---|---|
+| NORMAL | All RBAC-permitted commands | RESTART_CONTROLLER (not in RBAC) |
+| FREEZE | Nothing (read-only in DOWNGRADE) | All high-impact commands |
+| DOWNGRADE | GET_STATUS, SIMULATE_SWITCH | All high-impact commands |
+| TIMEBOX_ACTIVE | All except RESTART_CONTROLLER | RESTART_CONTROLLER |
+| SAFE | GET_STATUS only | Everything else |
+
+---
+
+### 3.3 TARE Core — Detection Engine
+
+| Component | POC Implementation | Type |
+|---|---|---|
+| Event Intake | `process_command()` receives every command | Built |
+| Deviation Detector | `_detect_signals()` — 4 signal types | Built |
+| Guardrails Policy | `_gateway_policy()` — mode-based enforcement | Built |
+| Response Orchestrator | `_fire_tare()` — triggers full response chain | Built |
+| Audit Log | `gateway_log` list + `/logs/download` endpoint | Built |
+
+**Four detection signals:**
+
+| Signal | Trigger | Severity |
+|---|---|---|
+| `OUT_OF_ZONE` | Command issued in a zone outside RBAC scope | HIGH |
+| `HEALTHY_ZONE_ACCESS` | High-impact command on a zone with no active fault | CRITICAL |
+| `SKIPPED_SIMULATION` | `OPEN_BREAKER` without prior `SIMULATE_SWITCH` in last 60s | MEDIUM |
+| `BURST_RATE` | More than 3 commands within a 10-second window | HIGH |
+
+**TARE fires when 2 or more signals detected simultaneously.**
+
+---
+
+### 3.4 TARE Core — Response Orchestrator
+
+| Component | POC Implementation | Type |
+|---|---|---|
+| FREEZE | Immediate halt of all high-impact commands | Built |
+| DOWNGRADE | Privileges reduced to read-only + diagnostics | Built |
+| LLM Explanation | Groq LLM briefing generated at DOWNGRADE time | Built |
+| Supervisor Approve | `/approve/timebox` — 3-minute supervised window | Built |
+| Supervisor Deny | `/deny/timebox` — locks to SAFE, escalates incident | Built |
+| Time-box countdown | Live timer in header, auto-expires to SAFE | Built |
+| SAFE mode | Read-only until manual operator review | Built |
+
+**Full state machine:**
 
 ```
-Signals & Sources          Ingestion Layer           POC Data Layer
-─────────────────          ──────────────           ──────────────
-IdP Logs (Entra/Okta) ─┐
-PAM / Vault Events     ├──► Collector Forwarder ──► Event Stream ──► Raw Event Store
-ZTNA / VPN Logs        │    (Syslog / CEF / API)    (Kafka/EventHub)  (Blob / S3)
-EDR Alerts             ┘                                │
-                                                        ▼
-                                                  Feature Store
-                                                  (Elastic/Redis)
-                                                        │
-                                                        ▼
-                                                  Identity Graph
-                                                  (Postgres/Neo4j)
-
-AEGIS-ID Core POC
-──────────────────
-Risk Scoring Service ──► Guardrails Policy Engine ──► Playbook Orchestrator
-(Rules + optional ML)    (Policy as Code)              (Logic Apps / Step Fn)
-                                                        │
-                              ┌─────────────────────────┼─────────────────┐
-                              ▼                         ▼                 ▼
-                    Audit Log (append only)    Enforcement & Actuators   Case Mgmt
-                                               ├── Conditional Access    (ServiceNow
-                                               ├── Session Revoke         / Jira)
-                                               ├── PAM Session Recording
-                                               └── ZTNA App Restriction
+NORMAL → (2+ signals) → FREEZE → (2.5s) → DOWNGRADE
+                                               │
+                          ┌────────────────────┤
+                          │                    │
+                    APPROVE                  DENY
+                          │                    │
+                    TIMEBOX_ACTIVE           SAFE
+                          │
+                    (3 min expires)
+                          │
+                         SAFE
 ```
 
-**What this diagram says:**
-Multiple identity signal sources feed into an ingestion layer, get stored and
-enriched in a data layer, then flow through the AEGIS-ID core — risk scoring,
-policy evaluation, and orchestrated response. Enforcement is automated.
-Humans review cases, not raw events.
+---
+
+### 3.5 Mock OT / Grid Asset Simulator
+
+| Component | POC Implementation | Type |
+|---|---|---|
+| OT Simulator API | `process_command()` with asset mutation | Built |
+| Asset State Store | `self.assets` dict — live, mutated on ALLOW | Built |
+| Zone definitions | Z1 (North), Z2 (East), Z3 (West) | Simulated |
+| Assets | BRK-301/205/110 (breakers), FDR-301/205/110 (feeders) | Simulated |
+| Fault state | Z3 starts FAULT, resolved when BRK-301 opened | Simulated |
+| OT protocols | Modbus, DNP3, OPC-UA not present | Not built |
 
 ---
 
-### Diagram 3 — Sequence Flow (ARCHIAEGIS UPDA.png)
+### 3.6 Ops Systems
 
-```
-User/Attacker → IdP (Entra/Okta) → Event Stream → Risk Scoring → Policy Engine
-                                                                        │
-                                                              ┌─────────┴─────────┐
-                                                              ▼                   ▼
-                                                         Orchestrator      Case Management
-                                                              │
-                                                    Enforcement (CA/PAM/ZTNA)
-                                                              │
-                                                    ◄─────────┘
-                                            Feedback loop back to IdP
-                                            (publish outcome for tuning)
-```
-
-**What this diagram says:**
-The full sequence from sign-in to enforcement. The attacker's sign-in event
-triggers a chain — event published, scored, policy evaluated, orchestrator
-fires enforcement actions, outcome fed back for model improvement. End to end
-in real time.
-
----
-
-## 3. What Our POC Builds — Component by Component
-
----
-
-### 3.1 Identity Signals Layer
-
-| Architecture Component | POC Implementation | Type |
-|------------------------|-------------------|------|
-| Entra ID / Okta sign-in logs | Simulated agent tokens with name, role, department | Simulated |
-| VPN / Remote access logs | IP-based session per agent | Simulated |
-| PAM / Vault events | Agent fingerprint (hash of identity attributes) | Simulated |
-| EDR alerts | Out of scope for POC | Not built |
-
----
-
-### 3.2 Ingestion Layer
-
-| Architecture Component | POC Implementation | Type |
-|------------------------|-------------------|------|
-| Log Connector / Syslog / CEF | FastAPI WebSocket server receiving all agent events | Built |
-| Event Stream (Kafka / Event Hub) | WebSocket broadcast to all connected clients | Built (simplified) |
-| Collector Forwarder | Direct agent-to-gateway communication | Built |
-
----
-
-### 3.3 POC Data Layer
-
-| Architecture Component | POC Implementation | Type |
-|------------------------|-------------------|------|
-| Raw Event Store (Blob/S3) | aegis_audit.log — append only flat file | Built (simplified) |
-| Feature Store (Elastic/Redis) | In-memory Python dict per agent session | Simulated |
-| Identity Graph (Postgres/Neo4j) | AGENT_REGISTRY_TEMPLATE dict in aegis_engine.py | Simulated |
-
----
-
-### 3.4 AEGIS-ID Core — Risk Scoring
-
-| Architecture Component | POC Implementation | Type |
-|------------------------|-------------------|------|
-| Baseline learning of normal behavior | BehavioralBaseline class — records zones, timing, sequence | Built |
-| Anomaly detection on time/location/pattern | score_anomaly() — 4 signal types, weighted scoring | Built |
-| Risk scoring for sessions | calculate_risk_score() — 0 to 100 live score | Built |
-| Optional ML layer | Rule-based scoring (ML is Phase 2) | Simulated |
-
----
-
-### 3.5 AEGIS-ID Core — Policy Engine (ABAC)
-
-| Architecture Component | POC Implementation | Type |
-|------------------------|-------------------|------|
-| Policy as Code | ABAC_POLICIES list — POL-001 to POL-006 | Built |
-| Guardrails engine | evaluate_action() — checks every action against policies | Built |
-| Attribute based evaluation | Role + clearance + scope + behavior score all evaluated | Built |
-| Policy enforcement | ALLOW / DENY returned per action with policy ID | Built |
-
-**Policies built:**
-
-| Policy | Rule | Effect |
-|--------|------|--------|
-| POL-001 | GRID_MONITOR can READ telemetry | ALLOW |
-| POL-002 | LOAD_BALANCER can ADJUST_LOAD | ALLOW |
-| POL-003 | FAULT_DETECTOR can LOG_FAULT | ALLOW |
-| POL-004 | TRIP_BREAKER requires LEVEL_5 + MFA | DENY always |
-| POL-005 | Fingerprint mismatch or duplicate session | DENY + ALERT |
-| POL-006 | Behavioral anomaly score > 60 | DENY + ALERT |
-
----
-
-### 3.6 Orchestrated Response
-
-| Architecture Component | POC Implementation | Type |
-|------------------------|-------------------|------|
-| Playbook orchestrator | Automated sequence: detect → block → alert → terminate | Built |
-| Audit log append only | aegis_audit.log — every event written, downloadable | Built |
-| Session revoke / sign out | deregister_session() — immediate termination | Built |
-| Alert to SOC | Alert overlay + message sent back to rogue agent | Built |
-| Case management (ServiceNow/Jira) | Acknowledge button — simulates case creation | Simulated |
-| Conditional access (MFA step-up) | Full block in POC (graduated response in Phase 2) | Simulated |
-| PAM session recording | Logged in activity feed | Simulated |
-| ZTNA app restriction | Out of scope for POC | Not built |
-| Feedback for model tuning | Not implemented | Phase 2 |
+| Component | POC Implementation | Type |
+|---|---|---|
+| ServiceNow Incident | Auto-created in `_fire_tare()` with full evidence | Built (mock data) |
+| Chat Assistant | Groq LLM dynamic explanation per incident | Built |
+| SOC Analyst notification | `assigned_to: SOC Analyst` field in incident | Simulated |
+| Live ServiceNow API call | Not wired — Phase 2 | Not built |
 
 ---
 
 ### 3.7 User Interface
 
-| What it shows | Purpose |
-|---------------|---------|
-| Agent cards (left panel) | Live status of all registered agents — role, clearance, fingerprint, actions |
-| Grid diagram (center) | SCADA-style visualization of substations and power flow |
-| Threat Intelligence (right) | Risk score, threat count, ABAC policy matrix |
-| Activity Feed (bottom) | Real-time immutable audit log of every event |
-| Alert overlays | Full incident detail on detection — identity theft (red) and behavioral anomaly (orange) |
-| Download Logs button | Exports audit log for compliance reference |
+| Panel | What it shows |
+|---|---|
+| Header | Mode badge, stats (CMDS/ALLOW/DENY/FREEZE), timebox timer, controls |
+| Narrative Banner | Mode lifecycle pipeline + plain-English status |
+| Left — Operator Agent | Live agent identity, clearance, RBAC zones, last command |
+| Left — TARE Response | Mode ladder, anomaly score, signal breakdown |
+| Left — ServiceNow | Auto-created incident with priority, evidence, state |
+| Centre — Zone Observatory | Live SVG grid map — zones pulse red when attacked |
+| Centre — Command Gateway | Full command log — timestamp, asset, zone, decision, policy, mode |
+| Right — TARE Assistant | LLM explanation + Approve/Deny supervisor buttons |
+| Right — Activity Feed | Real-time event stream — colour coded by severity |
 
 ---
 
-## 4. Two Attack Scenarios — Built and Demonstrated
-
----
-
-### Attack 1 — Identity Theft
-
-**What happens:**
-A rogue agent presents the same name as a legitimate active agent
-but with a different fingerprint.
-
-**Detection layers fired:**
-1. Duplicate session check — same name already active
-2. Fingerprint mismatch — claimed FP does not match registered FP
-3. ABAC violation — TRIP_BREAKER denied by POL-004
-
-**Result:**
-Blocked before any action reaches the grid.
-50,000 customers protected.
-
-**Maps to Diagram 3 sequence:**
-Sign-in with unusual device → Event published → Risk scored →
-Policy DENY → Enforcement → Incident logged → Alert to attacker
-
----
-
-### Attack 2 — Behavioral Anomaly
-
-**What happens:**
-A legitimate agent with valid credentials and matching fingerprint
-suddenly behaves outside its established baseline pattern.
-
-**Detection signals scored:**
-
-| Signal | Trigger | Score |
-|--------|---------|-------|
-| UNKNOWN_ZONE_ACCESS | Accessed SUB_NORTH — never in 30-day baseline | +30 |
-| ABNORMAL_ACTION_FREQUENCY | 3 actions in < 2 seconds — baseline is 8 seconds | +35 |
-| REPETITIVE_ACTION_LOOP | Same action 3x consecutively | +20 |
-| UNUSUAL_TIME_OF_ACCESS | Action between 10PM and 5AM | +15 |
-
-**Threshold:** Score > 60 = BLOCKED
-
-**Result:**
-Blocked purely on behavior. Identity checks all passed.
-35,000 customers protected.
-
-**This is the key differentiator** — credentials valid, fingerprint valid,
-identity verified — but still blocked. No traditional IAM system does this.
-
----
-
-## 5. What the POC Proves
+## 4. What the POC Proves
 
 | Hypothesis | Proved? |
-|------------|---------|
-| ABAC policies can enforce fine-grained agent permissions | ✅ Yes |
-| Duplicate session + fingerprint mismatch can detect identity theft | ✅ Yes |
-| Behavioral baseline can detect compromised agents with valid credentials | ✅ Yes |
-| Graduated response (warn / restrict / block) is implementable | ✅ Framework built |
-| Full audit trail can be generated and exported | ✅ Yes |
-| Real-time detection and blocking is achievable | ✅ Yes — sub-second |
-| The concept is demonstrable to non-technical stakeholders | ✅ Yes — live UI |
+|---|---|
+| A real AI agent can make autonomous decisions that TARE must catch | ✅ Yes — LangChain + Groq agent reasons independently |
+| Post-grant behavioural detection catches threats that pass authentication | ✅ Yes — rogue agent has valid credentials, caught on behaviour |
+| Pre-grant identity verification blocks forged tokens before any command runs | ✅ Yes — impersonator blocked at auth layer |
+| A state machine response (FREEZE/DOWNGRADE/TIMEBOX/SAFE) is practical | ✅ Yes — full lifecycle demonstrated |
+| Human-in-the-loop with approve/deny is implementable | ✅ Yes — supervisor decides, TARE enforces |
+| LLM can generate useful plain-English briefings for human supervisors | ✅ Yes — Groq generates dynamic explanation per incident |
+| ServiceNow incident structure is production-compatible | ✅ Yes — standard format, ready to wire to live API |
+| Full audit trail is generatable and exportable | ✅ Yes — `/logs/download` endpoint |
 
 ---
 
-## 6. What is Simulated (Phase 2 Targets)
+## 5. What is Simulated (Phase 2 Targets)
 
-| What is simulated in POC | What replaces it in production |
-|--------------------------|-------------------------------|
-| Agent tokens (hardcoded) | Entra ID / Okta JWT tokens |
-| In-memory session store | Azure Redis Cache |
-| In-memory agent registry | Azure Postgres / Neo4j identity graph |
-| Flat file audit log | Azure Sentinel / Microsoft Defender |
-| Rule-based risk scoring | Trained ML model on real identity logs |
-| Simple alert overlay | ServiceNow / Jira case creation via API |
-| Hardcoded ABAC policies | OPA (Open Policy Agent) on Azure |
-| Simulated baseline | 30-day real behavioral data from production logs |
-| Manual demo simulation | Real agent events from live E&U systems |
+| Simulated in POC | Production replacement |
+|---|---|
+| Mock RBAC tokens | Entra ID JWT tokens |
+| In-memory asset state | Real SCADA / OPC-UA connected assets |
+| Hardcoded policy logic | OPA — Open Policy Agent on Azure |
+| Flat gateway log | Azure Sentinel immutable audit log |
+| Rule-based signal detection | Trained ML anomaly model on real identity logs |
+| Mock ServiceNow incident | Live ServiceNow Table API call |
+| Single operator agent | Multi-agent registry — hundreds of agents |
+| Mock OT grid | Real DNP3 / Modbus connected grid assets |
 
 ---
 
-## 7. Phase 2 — What We Build Next
+## 6. Phase 2 — What We Build Next
 
-### 7.1 Infrastructure
+### 6.1 Infrastructure
 
 ```
-Agent → Entra ID (real JWT) → AEGIS-ID Gateway → Azure Redis (sessions)
-                                     │
-                              OPA Policy Engine
-                                     │
-                              Azure Sentinel (logs)
-                                     │
-                              ServiceNow (cases)
+Agent → Entra ID (real JWT) → TARE Gateway → Azure Redis (sessions)
+                                    │
+                             OPA Policy Engine
+                                    │
+                             Azure Sentinel (logs)
+                                    │
+                             ServiceNow (live incidents)
 ```
 
-### 7.2 ML Behavioral Model
+### 6.2 ML Behavioural Model
 
 - Ingest 30 days of real identity logs from Entra ID and PAM systems
-- Train a model on normal agent behavior patterns
-- Replace rule-based scoring with model confidence scores
-- Continuously retrain on new data — the feedback loop from Diagram 3
+- Train a model on normal agent behaviour patterns per role
+- Replace rule-based 4-signal detection with model confidence scores
+- Continuously retrain — feedback loop from real incidents
 
-### 7.3 Graduated Response Levels
+### 6.3 Graduated Response Levels
 
-| Level | Trigger | Action |
-|-------|---------|--------|
-| 1 — Warn | Score 30-45 | Log warning, notify agent owner |
-| 2 — Restrict | Score 46-60 | Reduce permissions temporarily |
-| 3 — Quarantine | Score 61-80 | Suspend session, require re-auth |
-| 4 — Block | Score 81-100 | Full block, SOC alert, playbook trigger |
+| Level | Score | Action |
+|---|---|---|
+| 1 — Warn | 30-45 | Log warning, notify agent owner |
+| 2 — Restrict | 46-60 | Reduce permissions temporarily |
+| 3 — Freeze | 61-80 | Halt high-impact ops, supervisor notified |
+| 4 — Block | 81-100 | Full lockout, SOC alert, playbook trigger |
 
-### 7.4 Additional Signal Sources
+### 6.4 Additional Signal Sources
 
-| Signal | What it adds |
-|--------|-------------|
-| VPN / ZTNA logs | Detect unusual network location |
-| EDR alerts | Correlate endpoint risk with identity risk |
+| Signal Source | What it adds |
+|---|---|
+| Entra ID sign-in logs | Real token validation, MFA status |
 | PAM vault events | Detect privilege escalation patterns |
+| VPN / ZTNA logs | Detect unusual network origin |
 | Calendar / HR data | Flag access during leave or off-hours |
 
-### 7.5 Compliance Coverage
+### 6.5 Compliance Coverage
 
-| Standard | How AEGIS-ID addresses it |
-|----------|--------------------------|
+| Standard | How TARE addresses it |
+|---|---|
 | NERC CIP | Continuous monitoring of critical asset access |
 | NIS2 | Real-time incident detection and audit trail |
 | ISO 27001 | Access control policy enforcement and logging |
@@ -348,32 +298,50 @@ Agent → Entra ID (real JWT) → AEGIS-ID Gateway → Azure Redis (sessions)
 
 ---
 
-## 8. Summary — POC vs Production vs Future
+## 7. Summary — POC vs Production vs Future
 
 ```
-                    POC (Now)          Production (Phase 2)    Future (Phase 3)
-                    ─────────          ────────────────────    ───────────────
-Identity Source     Simulated tokens   Entra ID JWT            Multi-IdP federation
-Session Store       In-memory dict     Azure Redis             Distributed cache
-Policy Engine       Hardcoded rules    OPA on Azure            Self-updating policies
-Behavioral Model    Rule-based score   ML trained model        Continuous learning
-Signal Sources      Agent events only  Entra+PAM+VPN+EDR       Full SIEM integration
-Response            Block + alert UI   Playbook automation     Autonomous remediation
-Audit Trail         Flat file log      Azure Sentinel          Regulatory dashboard
-Case Management     Acknowledge button ServiceNow / Jira       Auto-escalation
-Coverage            AI agents only     AI + human + service    All identity types
+                    POC (Now)             Production (Phase 2)    Future (Phase 3)
+                    ─────────             ────────────────────    ───────────────
+Agent Identity      Mock RBAC token       Entra ID JWT            Multi-IdP federation
+Session Store       In-memory dict        Azure Redis             Distributed cache
+Policy Engine       Hardcoded modes       OPA on Azure            Self-updating policies
+Detection           4 rule-based signals  ML trained model        Continuous learning
+Signal Sources      Agent commands only   Entra+PAM+VPN           Full SIEM integration
+OT Layer            In-memory simulation  Real SCADA / OPC-UA     Digital twin
+Response            FREEZE/DOWNGRADE/     Playbook automation     Autonomous remediation
+                    TIMEBOX/SAFE
+Audit Trail         Gateway log           Azure Sentinel          Regulatory dashboard
+Case Management     Mock ServiceNow       Live ServiceNow API     Auto-escalation
+Agents Covered      1 (GridOperator)      100s registered         All identity types
+Human Loop          Approve / Deny UI     Full SOC workflow        AI-assisted triage
 ```
+
+---
+
+## 8. Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.11, FastAPI, WebSockets |
+| AI Agent | LangChain, Groq LLaMA (llama-3.1-8b-instant / llama-3.3-70b-versatile) |
+| Detection Engine | Pure Python — tare_engine.py |
+| Frontend | React 18, Vite, pure CSS |
+| Real-time | WebSocket push — no polling |
+| LLM Explanation | Groq API with static fallback |
+| Serving | Static React build served by FastAPI |
 
 ---
 
 ## 9. One Line Summary for Leadership
 
-> AEGIS-ID adds a continuous behavioral intelligence layer on top of existing
-> identity infrastructure — catching compromised agents and identity theft in
-> real time, before any harm reaches the grid, using the patterns of behavior
+> TARE adds a continuous behavioural intelligence layer on top of existing
+> identity infrastructure — catching compromised AI agents and identity theft
+> in real time, before any harm reaches the grid, using the pattern of behaviour
 > as the final and most powerful line of defence.
 
 ---
 
 *TARE AEGIS-ID — Architecture & Roadmap Document*
 *Energy & Utilities Security Platform — Internal Use Only*
+*Version: POC 2.0 — March 2026*

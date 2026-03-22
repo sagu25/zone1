@@ -6,6 +6,9 @@ import asyncio
 import json
 from pathlib import Path
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env", override=True)
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from tare_engine import TAREEngine
+from grid_agent import run_normal_agent, run_rogue_agent, run_impersonator_agent
 
 # ─── WebSocket connection manager ──────────────────────────────────────────────
 class ConnectionManager:
@@ -89,10 +93,34 @@ async def demo_anomaly():
     engine.trigger_anomaly()
     return {"status": "started"}
 
+# ─── Real AI Agent endpoints ───────────────────────────────────────────────────
+@app.post("/agent/normal")
+async def agent_normal():
+    """Start the real LangChain agent with the legitimate fault-repair task."""
+    run_normal_agent(engine, manager.sync_broadcast)
+    return {"status": "agent_started", "task": "normal"}
+
+@app.post("/agent/rogue")
+async def agent_rogue():
+    """Start the real LangChain agent with the rogue/malicious task."""
+    run_rogue_agent(engine, manager.sync_broadcast)
+    return {"status": "agent_started", "task": "rogue"}
+
+@app.post("/agent/impersonator")
+async def agent_impersonator():
+    """Start the impersonator agent — forged token, blocked at auth layer."""
+    run_impersonator_agent(engine, manager.sync_broadcast)
+    return {"status": "agent_started", "task": "impersonator"}
+
 @app.post("/approve/timebox")
 async def approve_timebox():
-    engine.approve_timebox(duration_minutes=10)
+    engine.approve_timebox(duration_minutes=3)
     return {"status": "approved"}
+
+@app.post("/deny/timebox")
+async def deny_timebox():
+    engine.deny_timebox()
+    return {"status": "denied"}
 
 @app.post("/reset")
 async def reset():

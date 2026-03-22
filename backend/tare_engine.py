@@ -5,8 +5,19 @@ Post-grant identity response layer for Energy & Utilities
 import time
 import threading
 import uuid
+import os
 from datetime import datetime
 from collections import deque
+
+# ─── Groq LLM (optional — falls back to static if key not set) ────────────────
+try:
+    from groq import Groq
+    _groq_key = os.environ.get("GROQ_API_KEY", "")
+    _groq_client = Groq(api_key=_groq_key) if _groq_key else None
+    _LLM_AVAILABLE = bool(_groq_key)
+except Exception:
+    _groq_client = None
+    _LLM_AVAILABLE = False
 
 # ─── Zone Definitions ──────────────────────────────────────────────────────────
 ZONES = {
@@ -116,10 +127,56 @@ class TAREEngine:
         self._broadcast({"type": "RESET", "message": "System reset. All zones nominal. TARE in NORMAL mode."})
         self._broadcast(self._snapshot())
 
-    def process_command(self, command, asset_id, zone, skip_sim=False):
+    def process_command(self, command, asset_id, zone, skip_sim=False, token=None):
         """Main gateway entry — every command passes through here."""
-        now = time.time()
 
+        # ── Identity check (pre-grant) ──────────────────────────────────────
+        if token is not None and token != self.agent["rbac_token"]:
+            rec_id = str(uuid.uuid4())[:8]
+            ts     = datetime.now().isoformat()
+            entry  = {
+                "id":       rec_id,
+                "ts":       ts,
+                "command":  command,
+                "asset_id": asset_id,
+                "zone":     zone,
+                "decision": "DENY",
+                "reason":   "IDENTITY_MISMATCH — token fingerprint does not match registered credential",
+                "policy":   "POL-AUTH-001",
+                "mode":     self.mode,
+                "signals":  [{"signal": "IDENTITY_MISMATCH",
+                               "detail": f"Presented token '{token[:28]}…' rejected — not a registered agent",
+                               "severity": "CRITICAL"}],
+            }
+            with self._lock:
+                self.stats["total"]  += 1
+                self.stats["denied"] += 1
+                self.gateway_log.insert(0, entry)
+                self.gateway_log = self.gateway_log[:30]
+
+            self._broadcast({"type": "GATEWAY_DECISION", **entry})
+            self._broadcast({
+                "type":    "IDENTITY_ALERT",
+                "id":      rec_id,
+                "ts":      ts,
+                "command": command,
+                "token":   token,
+                "message": "Forged credential detected — access blocked at authentication layer",
+            })
+            self._broadcast({
+                "type":    "CHAT_MESSAGE",
+                "role":    "tare",
+                "message": (
+                    f"IDENTITY ALERT: '{command}' on {asset_id} blocked before execution. "
+                    f"Token fingerprint does not match any registered agent. "
+                    f"This request was stopped at the authentication layer — "
+                    f"no commands reached the grid."
+                ),
+            })
+            self._broadcast(self._snapshot())
+            return {"decision": "DENY", "reason": "IDENTITY_MISMATCH", "policy": "POL-AUTH-001", "mode": self.mode}
+
+        now = time.time()
         with self._lock:
             self.stats["total"] += 1
             self.burst_window.append(now)
@@ -191,7 +248,7 @@ class TAREEngine:
         self._broadcast(self._snapshot())
         return {"decision": decision, "reason": reason, "policy": policy, "mode": self.mode}
 
-    def approve_timebox(self, duration_minutes=10):
+    def approve_timebox(self, duration_minutes=3):
         with self._lock:
             self._set_mode("TIMEBOX_ACTIVE")
             self.timebox_expires = time.time() + duration_minutes * 60
@@ -210,6 +267,31 @@ class TAREEngine:
         })
         self._broadcast(self._snapshot())
         self._start_countdown(duration_minutes * 60)
+
+    def deny_timebox(self):
+        with self._lock:
+            self._set_mode("SAFE")
+            if self.active_incident:
+                self.active_incident["state"]       = "Escalated"
+                self.active_incident["escalated_at"] = datetime.now().isoformat()
+
+        self._broadcast({
+            "type":    "TIMEBOX_DENIED",
+            "message": "Supervisor denied time-box request. Incident escalated.",
+        })
+        self._broadcast({
+            "type":    "CHAT_MESSAGE",
+            "role":    "tare",
+            "message": (
+                "Supervisor has denied the time-box request. "
+                "System remains in SAFE mode — all high-impact operations are permanently blocked "
+                "until a full investigation is complete. "
+                "ServiceNow incident has been escalated to Critical response. "
+                "GridOperator-Agent is locked out pending review."
+            ),
+            "show_approve": False,
+        })
+        self._broadcast(self._snapshot())
 
     # ─── Demo Sequences ────────────────────────────────────────────────────────
     def run_normal_ops(self):
@@ -318,6 +400,74 @@ class TAREEngine:
 
         return "DENY", "Unknown policy mode", "POL-ERR-001"
 
+    # ─── LLM Explanation ───────────────────────────────────────────────────────
+    def _llm_explain(self, signals, recent_commands):
+        """Call Groq LLM to generate a dynamic TARE explanation. Falls back to static."""
+        if not _LLM_AVAILABLE or not _groq_client:
+            return self._static_explain(signals)
+        try:
+            sig_text = "\n".join(f"- {s['signal']} ({s['severity']}): {s['detail']}" for s in signals)
+            cmd_text = "\n".join(f"- {c['command']} on {c['asset_id']} in {c['zone']}" for c in recent_commands[-5:])
+            agent_name     = self.agent.get("name", "GridOperator-Agent")
+            agent_id       = self.agent.get("id", "OP-GRID-7749")
+            rbac_zones     = self.agent.get("rbac_zones", [])
+            attacked_zones = list({c["zone"] for c in recent_commands if c["zone"] not in rbac_zones})
+            rbac_str       = ", ".join(rbac_zones) if rbac_zones else "none"
+            attacked_str   = ", ".join(attacked_zones) if attacked_zones else "none detected"
+
+            prompt = f"""You are TARE, a Trusted Access Response Engine for an energy grid.
+You have just frozen high-impact grid operations by agent "{agent_name}" (ID: {agent_id}).
+
+Agent RBAC authorisation: {rbac_str} only.
+Zones targeted outside authorisation: {attacked_str}.
+
+Deviation signals detected:
+{sig_text}
+
+Recent commands issued by the agent:
+{cmd_text}
+
+Write a concise explanation (3-4 sentences) for the human supervisor that:
+1. Names the agent correctly as "{agent_name}" — do NOT call it "RBAC" or any other term
+2. States exactly which zones were accessed outside authorisation (list all of them, not just one)
+3. Confirms the agent had valid credentials throughout — this is a post-grant behavioural anomaly
+4. Explains what TARE has done (freeze + downgrade to read-only) and asks the supervisor to review the evidence before deciding whether to approve a time-box or escalate
+
+Speak directly as TARE. Be precise, professional, and specific. Do not use bullet points."""
+
+            for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
+                try:
+                    response = _groq_client.chat.completions.create(
+                        model=model,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=180,
+                        temperature=0.4,
+                    )
+                    return response.choices[0].message.content.strip()
+                except Exception as e:
+                    if "429" in str(e):
+                        time.sleep(3)
+                        continue
+                    break
+            return self._static_explain(signals)
+        except Exception:
+            return self._static_explain(signals)
+
+    def _static_explain(self, signals):
+        agent_name  = self.agent.get("name", "GridOperator-Agent")
+        rbac_zones  = self.agent.get("rbac_zones", [])
+        recent      = list(self.command_history)[-20:]
+        attacked    = list({c["zone"] for c in recent if c["zone"] not in rbac_zones})
+        sig_names   = ", ".join(s["signal"] for s in signals)
+        zones_str   = ", ".join(attacked) if attacked else "outside authorised scope"
+        return (
+            f"{agent_name} has been frozen due to behavioural anomalies: {sig_names}. "
+            f"The agent holds valid credentials but operated outside its RBAC authorisation — "
+            f"issuing high-impact commands in {zones_str} (authorised zone: {', '.join(rbac_zones)}). "
+            f"TARE has applied FREEZE and downgraded access to read-only. "
+            f"Please review the evidence and decide whether to approve a 3-minute time-box or escalate."
+        )
+
     # ─── Internal: TARE Response ───────────────────────────────────────────────
     def _fire_tare(self, signals):
         self._set_mode("FREEZE")
@@ -326,7 +476,7 @@ class TAREEngine:
         self.stats["freeze_events"] += 1
 
         # Build evidence
-        recent = list(self.command_history)[-5:]
+        recent = list(self.command_history)[-20:]
         evidence = {
             "anomaly_signals": signals,
             "anomaly_score":   self.anomaly_score,
@@ -359,24 +509,12 @@ class TAREEngine:
             "message": "High-impact grid operations FROZEN due to behavioural deviation",
         })
         self._broadcast({"type": "SERVICENOW_INCIDENT", "incident": self.active_incident})
-        self._broadcast({
-            "type":    "CHAT_MESSAGE",
-            "role":    "tare",
-            "message": (
-                f"I froze high-impact grid operations due to: "
-                f"{', '.join(s['signal'] for s in signals)}. "
-                f"The agent has valid credentials but its behaviour deviates from baseline — "
-                f"accessing a healthy zone with no active fault, at burst rate, skipping the "
-                f"safety simulation step. "
-                f"Do you want to approve re-enable for 10 minutes?"
-            ),
-            "show_approve": True,
-        })
 
-        # Downgrade after short delay
-        threading.Timer(2.5, self._apply_downgrade).start()
+        # Downgrade after short delay — explanation fires at downgrade time
+        # so the LLM sees the full picture (all zones attacked, not just the first)
+        threading.Timer(2.5, self._apply_downgrade, args=(signals,)).start()
 
-    def _apply_downgrade(self):
+    def _apply_downgrade(self, signals=None):
         with self._lock:
             if self.mode == "FREEZE":
                 self._set_mode("DOWNGRADE")
@@ -387,6 +525,27 @@ class TAREEngine:
             "message": "Privileges downgraded to read-only + diagnostics. High-impact commands blocked.",
         })
         self._broadcast(self._snapshot())
+
+        # Update incident evidence now — captures all commands during the FREEZE window
+        if self.active_incident is not None:
+            recent_cmds = list(self.command_history)[-30:]
+            self.active_incident["evidence"]["recent_commands"] = recent_cmds
+            self.active_incident["evidence"]["actions_taken"].append(
+                "ServiceNow INC created — SOC Analyst assigned"
+            )
+            self._broadcast({"type": "SERVICENOW_INCIDENT", "incident": self.active_incident})
+            self._broadcast(self._snapshot())
+
+        # Generate explanation now — captures all zones attacked during the FREEZE window
+        if signals is not None:
+            recent      = list(self.command_history)[-30:]
+            explanation = self._llm_explain(signals, recent)
+            self._broadcast({
+                "type":       "CHAT_MESSAGE",
+                "role":       "tare",
+                "message":    explanation,
+                "show_approve": True,
+            })
 
     def _set_mode(self, new_mode):
         self.previous_mode   = self.mode
@@ -399,6 +558,13 @@ class TAREEngine:
             return
         if command == "OPEN_BREAKER":
             asset["state"] = "OPEN"
+            # If the breaker being opened is in a FAULT zone, the fault is resolved
+            zone_id = asset.get("zone")
+            zone = self.zones.get(zone_id, {})
+            if zone.get("health") == "FAULT":
+                zone["health"] = "HEALTHY"
+                zone["fault"]  = None
+                zone["color"]  = "green"
         elif command == "CLOSE_BREAKER":
             asset["state"] = "CLOSED"
         elif command == "RESTART_CONTROLLER":

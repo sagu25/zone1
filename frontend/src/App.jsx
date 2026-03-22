@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import Header        from './components/Header'
-import OperatorAgent from './components/OperatorAgent'
-import CommandGateway from './components/CommandGateway'
+import Header          from './components/Header'
+import NarrativeBanner from './components/NarrativeBanner'
+import OperatorAgent   from './components/OperatorAgent'
+import CommandGateway  from './components/CommandGateway'
 import ZoneObservatory from './components/ZoneObservatory'
-import TAREResponse  from './components/TAREResponse'
-import ServiceNowCard from './components/ServiceNowCard'
-import ChatAssistant from './components/ChatAssistant'
-import ActivityFeed  from './components/ActivityFeed'
+import TAREResponse    from './components/TAREResponse'
+import ServiceNowCard  from './components/ServiceNowCard'
+import ChatAssistant   from './components/ChatAssistant'
+import ActivityFeed    from './components/ActivityFeed'
 
 const WS_URL = `ws://${window.location.hostname}:${window.location.port}/ws`
 
@@ -53,7 +54,9 @@ export default function App() {
   const [feedItems,   setFeedItems]   = useState([])
   const [wsConnected, setWsConnected] = useState(false)
   const [showApprove, setShowApprove] = useState(false)
-  const wsRef = useRef(null)
+  const [showFlash,   setShowFlash]   = useState(false)
+  const wsRef      = useRef(null)
+  const prevModeRef = useRef('NORMAL')
 
   const addFeed = useCallback((level, source, message) => {
     setFeedItems(prev => [mkFeed(level, source, message), ...prev].slice(0, 300))
@@ -85,6 +88,10 @@ export default function App() {
         addFeed('danger', 'TARE', `${msg.action} — ${msg.message}`)
         break
 
+      case 'IDENTITY_ALERT':
+        addFeed('danger', 'AUTH', `IDENTITY_MISMATCH — forged token rejected before execution: ${msg.command}`)
+        break
+
       case 'SERVICENOW_INCIDENT':
         addFeed('warning', 'ServiceNow', `Incident created: ${msg.incident?.incident_id}`)
         break
@@ -98,6 +105,11 @@ export default function App() {
       case 'TIMEBOX_APPROVED':
         setShowApprove(false)
         addFeed('info', 'TARE', `Time-box approved — ${msg.duration_minutes}min window active`)
+        break
+
+      case 'TIMEBOX_DENIED':
+        setShowApprove(false)
+        addFeed('danger', 'SUPERVISOR', 'Time-box DENIED — incident escalated. Agent locked out.')
         break
 
       case 'TIMEBOX_TICK':
@@ -127,6 +139,15 @@ export default function App() {
     return () => { clearTimeout(timer); ws?.close() }
   }, [handleMsg])
 
+  // Flash screen red when TARE fires FREEZE
+  useEffect(() => {
+    if (snap.mode === 'FREEZE' && prevModeRef.current !== 'FREEZE') {
+      setShowFlash(true)
+      setTimeout(() => setShowFlash(false), 700)
+    }
+    prevModeRef.current = snap.mode
+  }, [snap.mode])
+
   const post = (path) => fetch(path, { method:'POST' })
 
   // Scale to fit any screen
@@ -147,6 +168,7 @@ export default function App() {
 
   return (
     <div className="app-root">
+      {showFlash && <div className="tare-flash" />}
       <div className="app-layout" ref={layoutRef}>
         <Header
           wsConnected={wsConnected}
@@ -154,10 +176,13 @@ export default function App() {
           stats={snap.stats}
           timeboxRemaining={snap.timebox_remaining}
           timeboxTotal={snap.timebox_total}
-          onNormal={()  => post('/demo/normal')}
-          onAnomal={()  => post('/demo/anomaly')}
-          onReset={()   => post('/reset')}
+          onReset={()        => post('/reset')}
+          onAgentNormal={()        => post('/agent/normal')}
+          onAgentRogue={()         => post('/agent/rogue')}
+          onAgentImpersonator={()  => post('/agent/impersonator')}
         />
+
+        <NarrativeBanner mode={snap.mode} agent={snap.agent} />
 
         <div className="main-grid">
           {/* LEFT COL */}
@@ -169,7 +194,7 @@ export default function App() {
 
           {/* CENTRE COL */}
           <div className="col-centre">
-            <ZoneObservatory zones={snap.zones} assets={snap.assets} accessLog={snap.zone_access_log} />
+            <ZoneObservatory zones={snap.zones} assets={snap.assets} accessLog={snap.zone_access_log} mode={snap.mode} />
             <CommandGateway  log={snap.gateway_log} />
           </div>
 
@@ -179,6 +204,7 @@ export default function App() {
               messages={chatMsgs}
               showApprove={showApprove}
               onApprove={() => post('/approve/timebox')}
+              onDeny={()    => post('/deny/timebox')}
             />
             <ActivityFeed feedItems={feedItems} />
           </div>

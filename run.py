@@ -1,6 +1,7 @@
 """
-TARE AEGIS-ID — Single-command launcher
+TARE - Single-command launcher
 Run: python run.py
+Starts server, opens browser, then launches narrated demo automatically.
 """
 import subprocess
 import sys
@@ -10,7 +11,9 @@ import webbrowser
 import threading
 import time
 
-def find_free_port(start=8003, end=8020):
+ROOT = os.path.dirname(os.path.abspath(__file__))
+
+def find_free_port(start=8050, end=8100):
     for port in range(start, end):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
@@ -18,29 +21,32 @@ def find_free_port(start=8003, end=8020):
                 return port
             except OSError:
                 continue
-    raise RuntimeError("No free port found between 8003 and 8020")
-
-os.chdir(os.path.join(os.path.dirname(__file__), "backend"))
+    raise RuntimeError("No free port found between 8050 and 8100")
 
 port = find_free_port()
 
 print("=" * 55)
-print("  TARE AEGIS-ID — Autonomous Entity Grid Identity System")
+print("  TARE - Trusted Access Response Engine")
 print("=" * 55)
 print()
 print(f"  Starting server on port {port}...")
-print(f"  Opening browser at:  http://localhost:{port}")
+print(f"  Browser will open at:  http://localhost:{port}")
 print()
+print("  Narrated demo will start automatically in 5 seconds.")
 print("  Press Ctrl+C to stop.")
 print()
 
-# Auto-open browser after 2 seconds
-def open_browser():
-    time.sleep(2)
+def open_browser_and_narrate():
+    time.sleep(3)
     webbrowser.open(f"http://localhost:{port}")
+    time.sleep(4)  # give browser time to load
+    narrate_script = os.path.join(ROOT, "narrate.py")
+    if os.path.exists(narrate_script):
+        subprocess.Popen([sys.executable, narrate_script])
 
-threading.Thread(target=open_browser, daemon=True).start()
+threading.Thread(target=open_browser_and_narrate, daemon=True).start()
 
+os.chdir(os.path.join(ROOT, "backend"))
 subprocess.run([
     sys.executable, "-m", "uvicorn",
     "main:app",

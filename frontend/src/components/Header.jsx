@@ -15,7 +15,7 @@ function fmtTime(secs) {
   return `${m}:${String(s).padStart(2,'0')}`
 }
 
-export default function Header({ wsConnected, mode, stats, timeboxRemaining, timeboxTotal, onNormal, onAnomal, onReset }) {
+export default function Header({ wsConnected, mode, stats, timeboxRemaining, timeboxTotal, onReset, onAgentNormal, onAgentRogue, onAgentImpersonator }) {
   const [now, setNow] = useState(new Date())
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
 
@@ -54,9 +54,11 @@ export default function Header({ wsConnected, mode, stats, timeboxRemaining, tim
 
       {/* Controls */}
       <div className="hdr-controls">
-        <button className="hbtn hbtn-green"  onClick={onNormal} disabled={!wsConnected}>▶ Normal Ops</button>
-        <button className="hbtn hbtn-red"    onClick={onAnomal} disabled={!wsConnected}>⚡ Anomaly</button>
-        <button className="hbtn hbtn-ghost"  onClick={onReset}  disabled={!wsConnected}>↺ Reset</button>
+        <button className="hbtn hbtn-ai-green" onClick={onAgentNormal}       disabled={!wsConnected}>🤖 Agent: Fix Fault</button>
+        <button className="hbtn hbtn-ai-red"   onClick={onAgentRogue}        disabled={!wsConnected}>🤖 Agent: Rogue Task</button>
+        <button className="hbtn hbtn-ai-ghost" onClick={onAgentImpersonator} disabled={!wsConnected}>🕵 Agent: Impersonator</button>
+        <div className="btn-divider" />
+        <button className="hbtn hbtn-ghost"    onClick={onReset}             disabled={!wsConnected}>↺ Reset</button>
       </div>
 
       {/* Status + clock */}

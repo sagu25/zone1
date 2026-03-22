@@ -5,7 +5,7 @@ function fmtTs(ts) {
   return new Date(ts).toLocaleTimeString('en-GB', { hour12:false })
 }
 
-export default function ChatAssistant({ messages, showApprove, onApprove }) {
+export default function ChatAssistant({ messages, showApprove, onApprove, onDeny }) {
   const bottomRef = useRef(null)
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior:'smooth' })
@@ -33,10 +33,15 @@ export default function ChatAssistant({ messages, showApprove, onApprove }) {
 
       {showApprove && (
         <div className="approve-bar">
-          <div className="approve-label">Supervisor approval required</div>
-          <button className="approve-btn" onClick={onApprove}>
-            ✓ Approve 10-min Time-Box
-          </button>
+          <div className="approve-label">Supervisor decision required</div>
+          <div className="approve-actions">
+            <button className="approve-btn" onClick={onApprove}>
+              ✓ Approve 3-min Time-Box
+            </button>
+            <button className="deny-btn" onClick={onDeny}>
+              ✕ Deny / Escalate
+            </button>
+          </div>
         </div>
       )}
     </div>
