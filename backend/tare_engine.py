@@ -9,6 +9,13 @@ import os
 from datetime import datetime
 from collections import deque
 
+# ─── ML Detector (optional — graceful fallback if model not trained yet) ───────
+try:
+    from ml_detector import MLDetector
+    _ml = MLDetector()
+except Exception:
+    _ml = None
+
 # ─── Groq LLM (optional — falls back to static if key not set) ────────────────
 try:
     from groq import Groq
@@ -103,6 +110,9 @@ class TAREEngine:
         # Stats
         self.stats = {"total": 0, "allowed": 0, "denied": 0, "freeze_events": 0}
 
+        # ML detector
+        self.ml_detector = _ml
+
     # ─── Public API ────────────────────────────────────────────────────────────
     def reset(self):
         with self._lock:
@@ -163,14 +173,39 @@ class TAREEngine:
                 "token":   token,
                 "message": "Forged credential detected — access blocked at authentication layer",
             })
+
+            # Create ServiceNow incident for identity impersonation attempt
+            with self._lock:
+                if self.active_incident is None:
+                    incident_id = f"INC-TARE-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4().int)[:4]}"
+                    self.active_incident = {
+                        "incident_id":       incident_id,
+                        "short_description": "Identity impersonation attempt — forged token blocked at authentication layer",
+                        "priority":          "1 — Critical",
+                        "state":             "New",
+                        "assigned_to":       "SOC Analyst",
+                        "category":          "Security / Identity",
+                        "created_at":        ts,
+                        "evidence": {
+                            "anomaly_signals": entry["signals"],
+                            "anomaly_score":   100,
+                            "recent_commands": [],
+                            "actions_taken":   [
+                                "IDENTITY_MISMATCH — token rejected before any command reached the grid",
+                                "ServiceNow INC created — SOC Analyst assigned",
+                            ],
+                        },
+                    }
+                    self._broadcast({"type": "SERVICENOW_INCIDENT", "incident": self.active_incident})
+
             self._broadcast({
                 "type":    "CHAT_MESSAGE",
                 "role":    "tare",
                 "message": (
-                    f"IDENTITY ALERT: '{command}' on {asset_id} blocked before execution. "
-                    f"Token fingerprint does not match any registered agent. "
-                    f"This request was stopped at the authentication layer — "
-                    f"no commands reached the grid."
+                    f"IDENTITY ALERT: An agent presented a cloned identity with a forged credential token. "
+                    f"The token fingerprint did not match any registered agent — '{command}' on {asset_id} "
+                    f"was blocked at the authentication layer before reaching the grid. "
+                    f"A Critical ServiceNow incident has been raised and assigned to the SOC Analyst for investigation."
                 ),
             })
             self._broadcast(self._snapshot())
@@ -187,6 +222,7 @@ class TAREEngine:
             rec = {
                 "id":       str(uuid.uuid4())[:8],
                 "ts":       datetime.now().isoformat(),
+                "ts_epoch": now,
                 "command":  command,
                 "asset_id": asset_id,
                 "zone":     zone,
@@ -364,6 +400,19 @@ class TAREEngine:
                     "detail":   "OPEN_BREAKER without prior SIMULATE_SWITCH in last 60 s",
                     "severity": "MEDIUM",
                 })
+
+        # Signal 5 — ML anomaly detector (catches patterns rules miss, e.g. slow & low recon)
+        if self.ml_detector and self.ml_detector.available:
+            history = list(self.command_history)[-20:]
+            recent_cmds = [
+                {"command": r["command"], "zone": r["zone"],
+                 "ts": r.get("ts_epoch", now)}
+                for r in history
+            ]
+            zone_health = {k: v["health"] for k, v in self.zones.items()}
+            ml_result   = self.ml_detector.score(recent_cmds, zone_health)
+            for sig in ml_result.get("signals", []):
+                signals.append(sig)
 
         return signals
 

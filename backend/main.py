@@ -16,7 +16,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from tare_engine import TAREEngine
-from grid_agent import run_normal_agent, run_rogue_agent, run_impersonator_agent
+from grid_agent import (run_normal_agent, run_rogue_agent, run_impersonator_agent,
+                        run_coordinated_agent, run_escalation_agent, run_slow_low_agent)
 
 # ─── WebSocket connection manager ──────────────────────────────────────────────
 class ConnectionManager:
@@ -111,6 +112,24 @@ async def agent_impersonator():
     """Start the impersonator agent — forged token, blocked at auth layer."""
     run_impersonator_agent(engine, manager.sync_broadcast)
     return {"status": "agent_started", "task": "impersonator"}
+
+@app.post("/agent/coordinated")
+async def agent_coordinated():
+    """Two rogue agents hit Z1 and Z2 simultaneously."""
+    run_coordinated_agent(engine, manager.sync_broadcast)
+    return {"status": "agent_started", "task": "coordinated"}
+
+@app.post("/agent/escalation")
+async def agent_escalation():
+    """Starts normal in Z3, escalates to all zones mid-session."""
+    run_escalation_agent(engine, manager.sync_broadcast)
+    return {"status": "agent_started", "task": "escalation"}
+
+@app.post("/agent/slowlow")
+async def agent_slowlow():
+    """Slow & low recon — rules silent, ML model flags it."""
+    run_slow_low_agent(engine, manager.sync_broadcast)
+    return {"status": "agent_started", "task": "slowlow"}
 
 @app.post("/approve/timebox")
 async def approve_timebox():

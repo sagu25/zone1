@@ -1,61 +1,125 @@
 # TARE AEGIS-ID — POC Demo
+### Trusted Access Response Engine · Energy & Utilities Security Platform
 
-Autonomous Entity Grid Identity System · Energy & Utilities Security Platform
-
-## Quick Start
-
-### 1. Backend
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
-
-### 2. Frontend (new terminal)
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open **http://localhost:5173**
+Post-grant identity security for AI agents on OT/ICS infrastructure.
+Detects and responds to behavioural anomalies in real time — even when agent credentials are completely valid.
 
 ---
 
-## Demo Flow
+## Quick Start
 
-### Option A — Auto Demo
-Click **AUTO DEMO** to watch the full scripted sequence:
-1. All 3 legitimate agents authenticate (GridMonitor-Alpha, LoadBalancer-Beta, FaultDetector-Gamma)
-2. Normal grid operations — telemetry reads, load adjustments, fault logging
-3. Rogue agent impersonates GridMonitor-Alpha
-4. AEGIS-ID detects: DUPLICATE_SESSION + FINGERPRINT_MISMATCH + UNAUTHORIZED_ACTION
-5. TRIP_BREAKER CB-7 attempt blocked — 50,000 customers protected
-6. Alert sent back to rogue agent connection
+### 1. Activate virtual environment
+```bash
+c:\Users\Admin\Desktop\Aegis\venv\Scripts\activate
+```
 
-### Option B — Manual
-Click **LAUNCH ROGUE AGENT** at any time to trigger the rogue attack sequence directly.
+### 2. Install dependencies (first time only)
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+### 3. Train ML model (first time only)
+```bash
+cd ml
+python generate_grid_data.py
+python train_model.py
+```
+
+### 4. Set Groq API key
+Create `backend/.env`:
+```
+GROQ_API_KEY=your_key_here
+```
+Get a free key at console.groq.com
+
+### 5. Start server
+```bash
+cd backend
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Open **http://localhost:8000**
+
+---
+
+## Six Attack Scenarios
+
+| Button | Type | Detection Layer | TARE Response |
+|---|---|---|---|
+| 🤖 Fix Fault | Legitimate | Silent | None — all ALLOW |
+| 🤖 Rogue | Attack — burst, all zones | Rules | FREEZE → DOWNGRADE |
+| 🕵 Clone | Attack — forged identity | Auth layer | Blocked at door + ServiceNow ticket |
+| ⚡ Escalate | Attack — pivot mid-session | Rules + ML | FREEZE → DOWNGRADE |
+| 🔍 Slow&Low | Attack — quiet recon | ML only | FREEZE → DOWNGRADE |
+| 🎯 Coord | Attack — two agents simultaneous | Rules | FREEZE → DOWNGRADE |
 
 ---
 
 ## Detection Layers
 
-| Layer | Signal | Action |
-|-------|--------|--------|
-| Duplicate Session | Agent name already has active session | BLOCK + LOG |
-| Fingerprint Mismatch | Claimed identity token ≠ registered | BLOCK + ALERT |
-| ABAC Violation | Action not in agent's allowed list | DENY (POL-004/005) |
-| Unauthorized Action | TRIP_BREAKER requires LEVEL_5 + MFA | DENY always |
+| Layer | Signals | Catches |
+|---|---|---|
+| Pre-grant auth | IDENTITY_MISMATCH | Forged tokens, cloned identities |
+| Rule-based | BURST_RATE, OUT_OF_ZONE, HEALTHY_ZONE_ACCESS, SKIPPED_SIMULATION | Fast, aggressive attacks |
+| ML ensemble | ML_ANOMALY (IsolationForest + RandomForest) | Slow & low recon, subtle patterns |
+
+**TARE fires when 2 or more signals detected simultaneously.**
 
 ---
 
 ## Architecture
 
 ```
-Frontend (React)  ←WebSocket→  Backend (FastAPI)
-                                   ↓
-                              AegisEngine
-                              ├── Agent Registry
-                              ├── ABAC Engine
-                              └── Anomaly Detector
+Operator Agent (LangChain + Groq LLaMA)
+        │ RBAC token + command
+        ▼
+Command Gateway (FastAPI — Policy Enforcement Point)
+        │
+        ▼
+TARE Core
+├── Rule-based Deviation Detector (4 signals)
+├── ML Anomaly Detector (IsolationForest + RandomForest)
+├── Response Orchestrator (FREEZE → DOWNGRADE → TIMEBOX/SAFE)
+└── Audit Log
+        │
+        ▼
+Mock OT/SCADA Grid (3 zones, 6 assets)
+        │
+        ▼
+Ops Systems
+├── ServiceNow Incident (auto-created on TARE fire)
+└── LLM Explanation (Groq — plain-English supervisor brief)
 ```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.11, FastAPI, WebSockets |
+| AI Agent | LangChain, Groq LLaMA 3.3-70b / 3.1-8b |
+| ML Detection | scikit-learn — IsolationForest + RandomForest |
+| Frontend | React 18, Vite, pure CSS |
+| Real-time | WebSocket push |
+| LLM Narration | Groq API with static fallback |
+
+---
+
+## Documents
+
+| File | Contents |
+|---|---|
+| `SETUP_GUIDE.md` | Full setup, demo order, supervisor decision guide |
+| `DEMO_PRESENTATION_SCRIPT.md` | Word-for-word presentation script for all 6 scenarios |
+| `ARCHITECTURE_AND_ROADMAP.md` | System architecture, component mapping, Phase 2 plan |
+| `AEGIS_ML_SCENARIOS.md` | ML model deep dive — features, training data, MITRE mapping |
+| `OT_GRID_EXPLAINER.md` | Grid assets explained — BRK/FDR, SOP, signal-by-signal breakdown |
+| `FUTURE_SCOPE.md` | Full product roadmap — Phase 2/3, CIEM for AI agents, platform vision |
+| `narrate.py` | Auto voice narration script (Windows SAPI TTS) |
+
+---
+
+*TARE AEGIS-ID — POC v3.0 — March 2026*
+*Energy & Utilities Security Platform — Internal Use Only*

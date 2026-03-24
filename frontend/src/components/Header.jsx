@@ -15,7 +15,9 @@ function fmtTime(secs) {
   return `${m}:${String(s).padStart(2,'0')}`
 }
 
-export default function Header({ wsConnected, mode, stats, timeboxRemaining, timeboxTotal, onReset, onAgentNormal, onAgentRogue, onAgentImpersonator }) {
+export default function Header({ wsConnected, mode, stats, timeboxRemaining, timeboxTotal,
+  onReset, onAgentNormal, onAgentRogue, onAgentImpersonator,
+  onAgentCoordinated, onAgentEscalation, onAgentSlowLow }) {
   const [now, setNow] = useState(new Date())
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
 
@@ -46,19 +48,23 @@ export default function Header({ wsConnected, mode, stats, timeboxRemaining, tim
 
       {/* Stats strip */}
       <div className="hdr-stats">
-        <span className="stat-chip">CMDS <b>{stats?.total ?? 0}</b></span>
-        <span className="stat-chip ok">ALLOW <b>{stats?.allowed ?? 0}</b></span>
-        <span className="stat-chip bad">DENY <b>{stats?.denied ?? 0}</b></span>
-        <span className="stat-chip warn">FREEZE <b>{stats?.freeze_events ?? 0}</b></span>
+        <span className="stat-chip"><b>{stats?.total ?? 0}</b> CMDS</span>
+        <span className="stat-chip ok"><b>{stats?.allowed ?? 0}</b> ALLOW</span>
+        <span className="stat-chip bad"><b>{stats?.denied ?? 0}</b> DENY</span>
+        <span className="stat-chip warn"><b>{stats?.freeze_events ?? 0}</b> FRZ</span>
       </div>
 
       {/* Controls */}
       <div className="hdr-controls">
-        <button className="hbtn hbtn-ai-green" onClick={onAgentNormal}       disabled={!wsConnected}>🤖 Agent: Fix Fault</button>
-        <button className="hbtn hbtn-ai-red"   onClick={onAgentRogue}        disabled={!wsConnected}>🤖 Agent: Rogue Task</button>
-        <button className="hbtn hbtn-ai-ghost" onClick={onAgentImpersonator} disabled={!wsConnected}>🕵 Agent: Impersonator</button>
+        <button className="hbtn hbtn-ai-green"  onClick={onAgentNormal}       disabled={!wsConnected} title="Legitimate fault repair agent">🤖 Fix Fault</button>
         <div className="btn-divider" />
-        <button className="hbtn hbtn-ghost"    onClick={onReset}             disabled={!wsConnected}>↺ Reset</button>
+        <button className="hbtn hbtn-ai-red"    onClick={onAgentRogue}        disabled={!wsConnected} title="Rogue agent attack">🤖 Rogue</button>
+        <button className="hbtn hbtn-ai-ghost"  onClick={onAgentImpersonator} disabled={!wsConnected} title="Identity impersonation attack">🕵 Clone</button>
+        <button className="hbtn hbtn-ai-orange" onClick={onAgentEscalation}   disabled={!wsConnected} title="Privilege escalation attack">⚡ Escalate</button>
+        <button className="hbtn hbtn-ai-yellow" onClick={onAgentSlowLow}      disabled={!wsConnected} title="Slow & low reconnaissance">🔍 Slow&amp;Low</button>
+        <button className="hbtn hbtn-ai-purple" onClick={onAgentCoordinated}  disabled={!wsConnected} title="Coordinated multi-agent attack">🎯 Coord</button>
+        <div className="btn-divider" />
+        <button className="hbtn hbtn-ghost"     onClick={onReset}             disabled={!wsConnected} title="Reset system">↺ Reset</button>
       </div>
 
       {/* Status + clock */}

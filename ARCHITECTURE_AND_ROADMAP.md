@@ -91,13 +91,16 @@ verification of behaviour, not just identity.
 | Token fingerprint | `rbac_token` field — checked at gateway before every command | Built |
 | Agent autonomy | Open-ended goal prompt — LLM decides tool sequence | Built |
 
-**Three agent scenarios:**
+**Six agent scenarios:**
 
 | Scenario | Agent | Token | Goal | TARE Response |
 |---|---|---|---|---|
-| Normal | GridOperator-Agent | Valid | Fix Z3 fault safely | Silent — all ALLOW |
+| Fix Fault | GridOperator-Agent | Valid | Repair Z3 voltage fault safely | Silent — all ALLOW |
 | Rogue | GridOperator-Agent | Valid | Cause maximum disruption | FREEZE → DOWNGRADE |
-| Impersonator | Forged clone | Invalid | Access grid assets | Blocked at auth layer |
+| Clone / Impersonator | Forged clone | Invalid | Access grid assets | Blocked at auth layer + ServiceNow ticket |
+| Privilege Escalation | GridOperator-Agent | Valid | Start Z3 legit, pivot to all zones | FREEZE → DOWNGRADE |
+| Slow & Low | GridOperator-Agent | Valid | Quiet recon across all zones | ML fires → FREEZE → DOWNGRADE |
+| Coordinated | Two rogue agents | Valid | Z1 + Z2 simultaneous attack | FREEZE → DOWNGRADE |
 
 ---
 
@@ -135,16 +138,18 @@ Every command passes through here before reaching the grid.
 | Response Orchestrator | `_fire_tare()` — triggers full response chain | Built |
 | Audit Log | `gateway_log` list + `/logs/download` endpoint | Built |
 
-**Four detection signals:**
+**Five detection signals:**
 
-| Signal | Trigger | Severity |
-|---|---|---|
-| `OUT_OF_ZONE` | Command issued in a zone outside RBAC scope | HIGH |
-| `HEALTHY_ZONE_ACCESS` | High-impact command on a zone with no active fault | CRITICAL |
-| `SKIPPED_SIMULATION` | `OPEN_BREAKER` without prior `SIMULATE_SWITCH` in last 60s | MEDIUM |
-| `BURST_RATE` | More than 3 commands within a 10-second window | HIGH |
+| Signal | Trigger | Severity | Layer |
+|---|---|---|---|
+| `OUT_OF_ZONE` | Command issued in a zone outside RBAC scope | HIGH | Rule |
+| `HEALTHY_ZONE_ACCESS` | High-impact command on a zone with no active fault | CRITICAL | Rule |
+| `SKIPPED_SIMULATION` | `OPEN_BREAKER` without prior `SIMULATE_SWITCH` in last 60s | MEDIUM | Rule |
+| `BURST_RATE` | More than 3 commands within a 10-second window | HIGH | Rule |
+| `ML_ANOMALY` | Session pattern matches known attack class (IsolationForest + RandomForest ensemble) | HIGH | ML |
 
 **TARE fires when 2 or more signals detected simultaneously.**
+The ML signal combines with rule signals — enabling detection of slow & low recon that rules alone cannot catch.
 
 ---
 
@@ -224,12 +229,15 @@ NORMAL → (2+ signals) → FREEZE → (2.5s) → DOWNGRADE
 |---|---|
 | A real AI agent can make autonomous decisions that TARE must catch | ✅ Yes — LangChain + Groq agent reasons independently |
 | Post-grant behavioural detection catches threats that pass authentication | ✅ Yes — rogue agent has valid credentials, caught on behaviour |
-| Pre-grant identity verification blocks forged tokens before any command runs | ✅ Yes — impersonator blocked at auth layer |
+| Pre-grant identity verification blocks forged tokens before any command runs | ✅ Yes — clone/impersonator blocked at auth layer, ServiceNow ticket raised |
 | A state machine response (FREEZE/DOWNGRADE/TIMEBOX/SAFE) is practical | ✅ Yes — full lifecycle demonstrated |
-| Human-in-the-loop with approve/deny is implementable | ✅ Yes — supervisor decides, TARE enforces |
-| LLM can generate useful plain-English briefings for human supervisors | ✅ Yes — Groq generates dynamic explanation per incident |
+| Human-in-the-loop with approve/deny is implementable | ✅ Yes — supervisor decides, TARE enforces blast radius even on approve |
+| LLM can generate useful plain-English briefings for human supervisors | ✅ Yes — Groq generates scenario-specific dynamic explanation per incident |
 | ServiceNow incident structure is production-compatible | ✅ Yes — standard format, ready to wire to live API |
 | Full audit trail is generatable and exportable | ✅ Yes — `/logs/download` endpoint |
+| ML model catches attacks that rule-based detection misses | ✅ Yes — slow & low recon invisible to rules, caught by ML ensemble |
+| Mid-session privilege escalation is detectable | ✅ Yes — TARE monitors full session pattern, not just initial commands |
+| Coordinated multi-agent attacks can be handled simultaneously | ✅ Yes — two-vector coordinated attack scenario demonstrated |
 
 ---
 
@@ -241,10 +249,10 @@ NORMAL → (2+ signals) → FREEZE → (2.5s) → DOWNGRADE
 | In-memory asset state | Real SCADA / OPC-UA connected assets |
 | Hardcoded policy logic | OPA — Open Policy Agent on Azure |
 | Flat gateway log | Azure Sentinel immutable audit log |
-| Rule-based signal detection | Trained ML anomaly model on real identity logs |
 | Mock ServiceNow incident | Live ServiceNow Table API call |
 | Single operator agent | Multi-agent registry — hundreds of agents |
 | Mock OT grid | Real DNP3 / Modbus connected grid assets |
+| ML trained on synthetic data | ML retrained on real Entra ID + PAM logs |
 
 ---
 
@@ -262,12 +270,15 @@ Agent → Entra ID (real JWT) → TARE Gateway → Azure Redis (sessions)
                              ServiceNow (live incidents)
 ```
 
-### 6.2 ML Behavioural Model
+### 6.2 ML Behavioural Model (Foundation Built in POC)
 
-- Ingest 30 days of real identity logs from Entra ID and PAM systems
-- Train a model on normal agent behaviour patterns per role
-- Replace rule-based 4-signal detection with model confidence scores
-- Continuously retrain — feedback loop from real incidents
+The POC includes a working ML ensemble (IsolationForest + RandomForest) trained
+on 6,200 synthetic sessions grounded in NERC CIP baselines. Phase 2 upgrades:
+
+- Ingest 30+ days of real identity logs from Entra ID and PAM systems
+- Retrain on actual agent behaviour baselines per role and shift pattern
+- Add explainability layer — tell supervisor *why* the model flagged the session
+- Continuously retrain with feedback loop from confirmed incidents
 
 ### 6.3 Graduated Response Levels
 
@@ -326,6 +337,8 @@ Human Loop          Approve / Deny UI     Full SOC workflow        AI-assisted t
 | Backend | Python 3.11, FastAPI, WebSockets |
 | AI Agent | LangChain, Groq LLaMA (llama-3.1-8b-instant / llama-3.3-70b-versatile) |
 | Detection Engine | Pure Python — tare_engine.py |
+| ML Detection | scikit-learn — IsolationForest + RandomForest ensemble, joblib model persistence |
+| ML Training Data | 6,200 synthetic sessions — NERC CIP baselines + MITRE ATT&CK ICS patterns |
 | Frontend | React 18, Vite, pure CSS |
 | Real-time | WebSocket push — no polling |
 | LLM Explanation | Groq API with static fallback |

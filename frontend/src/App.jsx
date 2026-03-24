@@ -1,13 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Header          from './components/Header'
 import NarrativeBanner from './components/NarrativeBanner'
-import OperatorAgent   from './components/OperatorAgent'
 import CommandGateway  from './components/CommandGateway'
 import ZoneObservatory from './components/ZoneObservatory'
-import TAREResponse    from './components/TAREResponse'
-import ServiceNowCard  from './components/ServiceNowCard'
-import ChatAssistant   from './components/ChatAssistant'
-import ActivityFeed    from './components/ActivityFeed'
+import LeftPanel       from './components/LeftPanel'
+import RightPanel      from './components/RightPanel'
 
 const WS_URL = `ws://${window.location.hostname}:${window.location.port}/ws`
 
@@ -150,26 +147,11 @@ export default function App() {
 
   const post = (path) => fetch(path, { method:'POST' })
 
-  // Scale to fit any screen
-  const layoutRef = useRef(null)
-  useEffect(() => {
-    const scale = () => {
-      const el = layoutRef.current
-      if (!el) return
-      const s = Math.min(window.innerWidth / 1440, window.innerHeight / 810)
-      el.style.transform = `scale(${s})`
-      el.style.marginLeft = `${(window.innerWidth  - 1440 * s) / 2}px`
-      el.style.marginTop  = `${(window.innerHeight - 810  * s) / 2}px`
-    }
-    scale()
-    window.addEventListener('resize', scale)
-    return () => window.removeEventListener('resize', scale)
-  }, [])
 
   return (
     <div className="app-root">
       {showFlash && <div className="tare-flash" />}
-      <div className="app-layout" ref={layoutRef}>
+      <div className="app-layout">
         <Header
           wsConnected={wsConnected}
           mode={snap.mode}
@@ -180,16 +162,23 @@ export default function App() {
           onAgentNormal={()        => post('/agent/normal')}
           onAgentRogue={()         => post('/agent/rogue')}
           onAgentImpersonator={()  => post('/agent/impersonator')}
+          onAgentCoordinated={()   => post('/agent/coordinated')}
+          onAgentEscalation={()    => post('/agent/escalation')}
+          onAgentSlowLow={()       => post('/agent/slowlow')}
         />
 
-        <NarrativeBanner mode={snap.mode} agent={snap.agent} />
+        <NarrativeBanner mode={snap.mode} agent={snap.agent} signals={snap.anomaly_signals} incident={snap.active_incident} />
 
         <div className="main-grid">
           {/* LEFT COL */}
           <div className="col-left">
-            <OperatorAgent agent={snap.agent} />
-            <TAREResponse  mode={snap.mode} signals={snap.anomaly_signals} score={snap.anomaly_score} />
-            <ServiceNowCard incident={snap.active_incident} />
+            <LeftPanel
+              agent={snap.agent}
+              mode={snap.mode}
+              signals={snap.anomaly_signals}
+              score={snap.anomaly_score}
+              incident={snap.active_incident}
+            />
           </div>
 
           {/* CENTRE COL */}
@@ -200,13 +189,13 @@ export default function App() {
 
           {/* RIGHT COL */}
           <div className="col-right">
-            <ChatAssistant
+            <RightPanel
               messages={chatMsgs}
+              feedItems={feedItems}
               showApprove={showApprove}
               onApprove={() => post('/approve/timebox')}
               onDeny={()    => post('/deny/timebox')}
             />
-            <ActivityFeed feedItems={feedItems} />
           </div>
         </div>
       </div>

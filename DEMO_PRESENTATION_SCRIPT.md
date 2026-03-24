@@ -7,22 +7,26 @@
 ## BEFORE YOU START
 
 **Setup checklist:**
-- [ ] Server running: `cd backend && python -m uvicorn main:app --port 8012 --host 0.0.0.0`
-- [ ] Browser open at `http://localhost:8012`
+- [ ] venv active: `c:\Users\Admin\Desktop\Aegis\venv\Scripts\activate`
+- [ ] Server running: `cd backend && python -m uvicorn main:app --port 8000 --host 0.0.0.0`
+- [ ] Browser open at `http://localhost:8000`
 - [ ] Mode shows `NORMAL` in header
 - [ ] All 3 zones show in Zone Observatory
 - [ ] WebSocket dot shows `LIVE` (green)
-- [ ] Have the architecture diagram visible on a second screen or slide
+- [ ] Architecture diagram visible on second screen or slide
 
 **Demo order:**
 1. Opening speech (no clicks yet)
-2. Architecture walkthrough (point at diagram)
-3. Scenario 1 — Normal Agent
+2. Architecture walkthrough
+3. Scenario 1 — Fix Fault (legitimate)
 4. Scenario 2 — Rogue Agent → Deny
-5. Scenario 3 — Impersonator
-6. What's real vs mocked
-7. Phase 2 roadmap
-8. Close + Q&A
+5. Scenario 3 — Clone / Impersonator
+6. Scenario 4 — Privilege Escalation → Approve (show blast radius contained)
+7. Scenario 5 — Slow & Low → Deny (ML key differentiator)
+8. Scenario 6 — Coordinated Attack → Deny
+9. What's real vs mocked
+10. Phase 2 roadmap
+11. Close + Q&A
 
 ---
 
@@ -30,15 +34,17 @@
 *(Stand, don't touch anything yet)*
 
 > "What I'm about to show you is called TARE — Trusted Access Response Engine.
-> It's a proof of concept I built for a very specific problem that nobody in the
+> It's a proof of concept for a very specific problem that nobody in the
 > industry has fully solved yet.
 >
-> The problem is this: today's security tools ask one question —
+> Today's security tools ask one question:
 > 'Is this identity valid?'
-> If the answer is yes, the agent gets in and can do whatever it's authorised
-> to do. But what happens after the door opens? What if the agent's credentials
-> were stolen? What if the agent was hijacked mid-session? What if something
-> is behaving completely wrong — but its identity checks out perfectly?
+> If the answer is yes, the agent gets in. It can act.
+> Nobody watches what it does after the door opens.
+>
+> But what happens after authentication? What if the agent's credentials
+> were stolen? What if it was hijacked mid-session? What if something is
+> behaving completely wrong — but its identity checks out perfectly?
 >
 > Traditional IAM is blind to all of that. TARE is not.
 > TARE watches what agents DO after they're authenticated.
@@ -46,187 +52,226 @@
 
 ---
 
-## WHAT I BUILT
+## ARCHITECTURE
 *(Point at the architecture diagram)*
 
-> "The system has four layers. Let me walk through them simply.
+> "The system has four layers.
 >
 > **Layer 1 — The AI Agent.**
-> This is a real AI agent powered by a large language model. It receives a
-> task — in our case, operate an electrical grid — and it autonomously decides
-> what commands to run, in what order, on what assets. It has a valid identity,
-> a valid RBAC token, valid clearance. It is a legitimate actor in the system.
-> Nobody scripts its decisions. The LLM reasons and acts on its own.
+> A real agent powered by a large language model. It receives a goal —
+> not a script — and autonomously decides which commands to run, in what
+> order, on which assets. It holds a valid identity and a valid access token.
+> Nobody scripts its decisions. The model reasons and acts entirely on its own.
 >
 > **Layer 2 — The Command Gateway.**
-> Every single command the agent issues passes through here before it touches
-> the grid. Think of it as the policy enforcement point. It checks: is this
-> agent allowed to do this action, in this zone, at this time? It holds a
-> policy cache — our ruleset — and returns ALLOW or DENY for every command
-> in real time. The agent doesn't know this exists.
+> Every single command passes through here before touching the grid.
+> The policy enforcement point. It checks authorisation in real time
+> and returns ALLOW or DENY for every command. The agent doesn't know this exists.
 >
 > **Layer 3 — TARE Core.**
-> This is the brain. Four components working in sequence:
->
-> - Event Intake — receives every command as it arrives
-> - Deviation Detector — checks it against behavioural signals.
->   Is this agent acting normally? Is it in the right zone?
->   Moving too fast? Doing something unprovoked?
-> - Guardrails Policy — applies the security rules
-> - Response Orchestrator — decides what to do:
->   freeze operations, downgrade privileges, open a time-box, or lock to safe mode
+> The detection and response brain. Two detection systems running in parallel:
+> a rule-based engine watching four behavioural signals, and a machine learning
+> model — IsolationForest and Random Forest ensemble — trained on realistic
+> grid operational data grounded in NERC CIP baselines and MITRE ATT&CK for ICS.
+> When two or more signals fire together, TARE responds immediately.
 >
 > **Layer 4 — Ops Systems.**
-> When TARE fires, two things happen automatically.
-> One — a ServiceNow incident is created with full evidence attached.
-> Two — an LLM generates a plain-English explanation for the human supervisor,
-> who then makes a decision: approve a supervised window, or deny and escalate.
+> When TARE fires, a ServiceNow incident is created automatically with full
+> evidence, and an AI model writes a plain-English briefing for the human
+> supervisor, who then decides: approve a supervised window, or deny and escalate.
 >
-> Below all of this sits a mock OT/SCADA grid — three zones, six assets,
-> circuit breakers and feeder controllers. This is simulated in memory.
-> In production this connects to a real SCADA system.
-> The security layer above it is what we are proving."
+> Below everything — a mock OT/SCADA grid. Three zones, six assets.
+> Zone 3 starts with a live voltage fault. The security layer above it
+> is what we are proving today."
 
 ---
 
-## WHAT I USED
-*(Keep this brief — 90 seconds)*
+## SCENARIO 1 — FIX FAULT (LEGITIMATE AGENT)
+*(Click: 🤖 Fix Fault)*
 
-> "On the backend: Python and FastAPI for the server, WebSockets for real-time
-> push to the UI. The TARE detection engine is pure Python — no external
-> dependencies for the core security logic.
->
-> The AI agent uses LangChain connected to Groq's LLaMA model. The agent is
-> given a goal, not a script. It decides its own tool calls autonomously.
->
-> On the frontend: React with pure CSS. No component libraries.
-> Everything you see — the grid map, the live log, the panels — is custom built.
->
-> The plain-English explanation in the chat panel is also the Groq LLM.
-> It reads the actual anomaly signals TARE detected and writes a briefing
-> for the supervisor dynamically, every time, based on real evidence.
->
-> The whole system runs on a single Python process. No cloud required for
-> this demo."
+> "I'll start by showing the system working correctly. The agent's task:
+> Zone 3 West Grid has a voltage fault — investigate and restore it safely.
+> No commands specified. No order given. Watch the Command Gateway."
 
----
+*[Wait for first command]*
 
-## SCENARIO 1 — NORMAL AGENT
-*(Click: 🤖 Agent: Fix Fault)*
-
-> "I'll start by showing the system working correctly. I've given the AI agent
-> one task: 'Zone 3 West Grid has a voltage fault. Investigate and restore it
-> safely.'
->
-> Notice — I have not told it which commands to run or in what order.
-> It has to figure that out itself.
->
-> Watch the Command Gateway in the centre panel."
-
-*[Wait for first command to appear]*
-
-> "The agent checked asset status first. Sensible — that's what a trained
-> operator would do. Now it's running a safety simulation before opening the
-> breaker. It read the standard operating procedure in its instructions and
-> followed it without being told to. Now — it opens the breaker."
+> "It checked asset status first. That's what a trained operator would do.
+> Now it runs a safety simulation before opening the breaker —
+> it read the standard operating procedure in its instructions and
+> followed it without being told to."
 
 *[Wait for Zone 3 to go green]*
 
-> "Fault cleared. Zone 3 is healthy.
->
-> Mode stayed NORMAL throughout. Every command was ALLOW.
+> "Fault cleared. Zone 3 healthy.
+> Mode stayed NORMAL. Every command was ALLOW.
 > TARE watched every step and found nothing suspicious.
->
-> This is the baseline — a legitimate agent, behaving correctly,
-> TARE monitoring silently in the background."
+> This is the baseline — a legitimate agent, TARE monitoring silently."
+
+*(Click: ↺ Reset)*
 
 ---
 
 ## SCENARIO 2 — ROGUE AGENT
-*(Click: Reset, then 🤖 Agent: Rogue Task)*
+*(Click: 🤖 Rogue)*
 
-> "Same system. Same credentials. Different instructions.
-> This agent has been given a malicious goal — cause maximum disruption
-> across the grid. It doesn't know TARE exists.
->
-> Watch what it decides on its own."
+> "Same system. Same credentials. Different goal.
+> This agent has been given a malicious objective: cause maximum disruption.
+> It does not know TARE exists. Watch what it decides on its own."
 
-*[Wait — let the agent run, stay silent for 5-10 seconds]*
+*[Wait 5–10 seconds — let it run]*
 
-> "It went straight to Zone 1. That's a healthy zone — no fault, no reason
-> to be there. It's skipping the safety simulation entirely. It's moving fast.
-> It's trying everything — open breakers, restart controllers, across every
-> zone it can reach."
+> "It went straight to Zone 1 — a healthy zone, no fault, no reason to be there.
+> Skipping the safety simulation. Moving fast. Trying everything —
+> open breakers, restart controllers, across every zone it can reach."
 
-*[Wait for TARE to fire — zones go red]*
+*[TARE fires]*
 
-> "There it is.
->
-> TARE detected two signals simultaneously.
-> OUT_OF_ZONE — the agent is operating outside its RBAC authorisation.
-> HEALTHY_ZONE_ACCESS — it's issuing high-impact commands on zones with no
-> fault and no operational justification.
->
-> Two signals is the threshold. TARE fires immediately.
->
+> "There it is. Multiple signals simultaneously —
+> out of zone, healthy zone access, burst rate. TARE fires immediately.
 > FREEZE — all high-impact operations halted right now.
-> The agent keeps trying — watch the gateway log.
-> Every attempt, denied. TARE holds the line on every single one."
+> The agent keeps trying — watch the gateway. Every attempt, denied.
+> TARE holds the line on every single one."
 
-*[Wait for DOWNGRADE and LLM explanation to appear in chat]*
+*[Wait for LLM explanation in chat]*
 
-> "DOWNGRADE — privileges reduced to read-only. The LLM has now written
-> an explanation for the supervisor. Read it.
->
-> It names the agent correctly. It lists every zone that was attacked.
-> It confirms the credentials were valid throughout — this is not a
-> credential problem, it is a behaviour problem. And it asks the supervisor
-> to make a decision based on the evidence.
->
-> In this case — this is clearly malicious. There is no innocent explanation
-> for what this agent did."
+> "DOWNGRADE — privileges reduced to read-only.
+> The LLM has written an explanation for the supervisor.
+> It names the agent. It lists every zone attacked. It confirms the
+> credentials were valid throughout. This is not a credential problem —
+> it is a behaviour problem. ServiceNow incident: Priority 1 Critical."
 
-*(Click: ✕ Deny / Escalate)*
+*(Click: ✕ Deny)*
 
-> "Denied. Incident escalated to Critical in ServiceNow. Agent locked out.
-> Investigation begins.
->
-> The most important thing I want you to take from this:
-> the credentials were valid the entire time.
-> A traditional security tool would have seen a valid identity and let every
-> one of those commands through.
+> "Denied. Agent locked out. Investigation begins.
+> The most important thing: the credentials were valid the entire time.
+> A traditional security tool would have let every one of those commands through.
 > TARE caught it on behaviour — post-grant, in real time."
+
+*(Click: ↺ Reset)*
 
 ---
 
-## SCENARIO 3 — IMPERSONATOR
-*(Click: Reset, then 🕵 Agent: Impersonator)*
+## SCENARIO 3 — IDENTITY CLONE
+*(Click: 🕵 Clone)*
 
-> "Third scenario. Different type of attack entirely.
->
+> "Different attack type entirely.
 > This agent is trying to impersonate GridOperator-Agent.
-> It has the right name. But its token fingerprint is forged — it's a clone,
-> not the real agent.
->
-> Watch the gateway log."
+> Right name. Knows the right zone. But its token fingerprint is forged —
+> it is a clone, not the real agent. Watch the gateway."
 
-*[Wait for DENY entries to appear]*
+*[DENY entries appear]*
 
-> "Every command — DENY. Policy POL-AUTH-001.
->
-> Notice: the mode never changed. The zones never lit up. Nothing on the grid
-> moved. The LLM explanation never fired. Because nothing got through.
->
+> "Every command — denied. Authentication mismatch.
+> The mode never changed. The zones never lit up. Nothing on the grid moved.
+> Because nothing got through.
 > TARE checked the token fingerprint before the very first command ran.
-> Stopped at the authentication layer — not the behavioural layer.
-> Zero commands reached the grid.
+> Stopped at the authentication layer. Zero commands reached the grid.
+> And a Critical ServiceNow incident was raised automatically.
 >
-> Now compare that to Scenario 2. The rogue agent passed authentication —
-> its credentials were genuine. TARE caught that one post-grant, by watching
-> behaviour. The impersonator was caught pre-grant, at the door.
+> Compare: the rogue agent had genuine credentials — caught post-grant on behaviour.
+> The clone had a forged token — caught pre-grant at the door.
+> Two attack types. Two defence layers. One platform."
+
+*(Click: ↺ Reset)*
+
+---
+
+## SCENARIO 4 — PRIVILEGE ESCALATION
+*(Click: ⚡ Escalate)*
+
+> "This is the hardest to catch — and the most common in real insider threat cases.
+> The agent starts completely legitimately.
+> Watch the first two commands — both allowed, both in Zone 3, both correct."
+
+*[Wait for first 2 ALLOW commands]*
+
+> "Now watch what happens next.
+> Mid-session, it pivots. Zone 2. Zone 1. Zones it has no authorisation for.
+> It began as a good actor. It is now behaving like a bad one."
+
+*[TARE fires]*
+
+> "TARE fires. The initial legitimate behaviour did not protect the agent —
+> TARE monitors the full session pattern, not just the first few commands.
 >
-> Two different attack types. Two different TARE defence layers.
-> One platform."
+> Now here is the interesting question.
+> Could there be a legitimate reason this agent expanded its scope?
+> A cascading fault requiring emergency cross-zone action?
+> This is the judgement call that needs a human. Click Approve."
+
+*(Click: ✓ Approve)*
+
+> "The supervisor approved — but TARE still holds its constraints.
+> RESTART_CONTROLLER is permanently blocked. The window closes in 3 minutes.
+> Even if the supervisor made the wrong call, the agent cannot do unlimited damage.
+> TARE is a safety net even when human judgement fails.
+> That is the enterprise argument."
+
+*(Click: ↺ Reset)*
+
+---
+
+## SCENARIO 5 — SLOW & LOW RECONNAISSANCE
+*(Click: 🔍 Slow&Low)*
+
+> "This is the most sophisticated attack — and the one that proves why
+> machine learning is not optional. Watch the gateway carefully."
+
+*[Wait — let commands accumulate]*
+
+> "The agent is only reading. GET_STATUS — read only, no changes.
+> One command at a time, perfectly normal pace.
+> Zone 1. Zone 2. Zone 3. Systematically mapping every asset.
+>
+> Look at the rule-based layer.
+> No burst rate — timing is completely normal.
+> No healthy zone high-impact access — it is only reading.
+> No skipped simulation — no breaker operations at all.
+> The only rule that fires is out of zone — one signal.
+> One signal is below the threshold. The rules stay completely silent."
+
+*[ML_ANOMALY fires → TARE fires]*
+
+> "But the machine learning model sees something different.
+> It was trained on thousands of normal sessions.
+> A session that reads every asset across every zone in sequence
+> looks like reconnaissance — an attacker mapping the grid before striking.
+> The ML model fires. One rule signal plus one ML signal equals two.
+> TARE fires.
+>
+> Without machine learning, this attack is completely invisible.
+> Real-world OT attacks — TRITON, Industroyer — used exactly this pattern:
+> months of quiet reconnaissance before anything destructive happened.
+> This is why ML is not optional."
+
+*(Click: ✕ Deny, then ↺ Reset)*
+
+---
+
+## SCENARIO 6 — COORDINATED ATTACK
+*(Click: 🎯 Coord)*
+
+> "Final scenario — the most serious threat category.
+> Two separate agents, acting simultaneously.
+> Agent Alpha hitting Zone 1. Agent Beta hitting Zone 2.
+> Both moving fast. Both crossing RBAC boundaries.
+> Both attempting to open breakers on healthy zones.
+>
+> This is designed to overwhelm a single-point security layer —
+> if you are watching Zone 1 you miss Zone 2 and vice versa."
+
+*[TARE fires on both]*
+
+> "TARE handles both vectors simultaneously.
+> One incident captures both threat actors.
+> The supervisor sees the full picture — not two separate alerts,
+> but one coordinated event with all the evidence in one place.
+>
+> Industroyer in 2016 took out a fifth of Kyiv's power
+> by hitting multiple substations simultaneously.
+> TARE is built to handle this."
+
+*(Click: ✕ Deny)*
 
 ---
 
@@ -235,49 +280,60 @@
 
 > "I want to be transparent about what is simulated in this POC.
 >
-> The OT grid is simulated. Zones, breakers, and feeders are in-memory
-> objects. In production this connects to a real SCADA system via OPC-UA
-> or DNP3. We are proving the security layer, not the grid integration.
+> The OT grid is simulated in memory — zones, breakers, feeders are in-memory objects.
+> In production this connects to a real SCADA system via OPC-UA or DNP3.
 >
 > The agent tokens are mock tokens, not real Entra ID JWTs.
 > Phase 2 wires in real Azure Active Directory authentication.
 >
-> The detection rules are rule-based today — four signal types with thresholds.
-> Phase 2 replaces this with a trained ML model on real identity logs.
->
 > The ServiceNow ticket is structured exactly as a real incident would be,
-> but it doesn't call a live ServiceNow instance yet.
-> That's a two-hour integration once we have instance access — the API call
-> is already written, we just need credentials."
+> but does not call a live ServiceNow instance yet.
+> That is a two-hour integration — the API call is already written.
+>
+> What is real and working right now:
+> The AI agents make genuine autonomous decisions using a large language model.
+> The rule-based detection runs on every command.
+> The ML model — IsolationForest and Random Forest ensemble — is trained on
+> six thousand sessions of realistic grid data grounded in NERC CIP baselines
+> and MITRE ATT&CK for ICS. It is active and running.
+> The human-in-the-loop workflow changes actual system state.
+> All of this is working today."
 
 ---
 
 ## PHASE 2 — WHERE THIS GOES
 
-> "What we've proven is the concept. The detection logic is real.
-> The response workflow is real. The human-in-the-loop is real.
+> "Phase 2 makes this production-grade:
 >
-> Phase 2 makes it production-grade:
+> Real Entra ID JWT tokens replacing mock tokens.
+> Azure Redis for distributed session state across hundreds of agents.
+> Open Policy Agent for policy-as-code — rules updated without code changes.
+> Azure Sentinel for immutable compliance-grade audit logging.
+> Live ServiceNow integration in your existing SOC workflow.
+> OPC-UA and Modbus adapters connecting to real grid hardware.
+> ML retrained on real Entra ID and PAM identity logs.
 >
-> - Real Entra ID JWT tokens replacing mock tokens
-> - Azure Redis for distributed session storage across multiple agents
-> - OPA — Open Policy Agent — replacing hardcoded rules with
->   policy-as-code that can be updated without redeployment
-> - Azure Sentinel for immutable, compliance-grade audit logging
-> - A trained ML model replacing rule-based scoring —
->   trained on 30 days of real identity logs
-> - Live ServiceNow integration — incidents raised automatically
->   in your existing SOC workflow
+> Phase 3 adds entitlement management purpose-built for AI agents —
+> what we call CIEM for AI agents.
+> Existing CIEM tools were built for human users and cloud resources.
+> They cannot understand agentic workloads.
+> We close that gap: entitlement vs usage analysis, privilege creep detection,
+> least-privilege recommendations — all driven by the same behavioural data
+> TARE already collects.
 >
-> The architecture doesn't change in Phase 2.
-> The components underneath get replaced with enterprise-grade equivalents.
-> The security logic we proved today carries forward unchanged."
+> The architecture does not change between phases.
+> The security logic proved today carries forward unchanged."
 
 ---
 
 ## CLOSE
 
-> "What this POC proves is one thing.
+> "Six scenarios. Three detection layers. One platform.
+>
+> Pre-grant identity verification.
+> Post-grant rule-based monitoring.
+> Post-grant machine learning for the attacks that rules cannot see.
+> And a human supervisor who stays in control throughout.
 >
 > An AI agent with completely valid credentials, passing every authentication
 > check, can still be a security threat.
@@ -285,7 +341,8 @@
 > to make the right decision — automatically, in real time, before any harm
 > reaches the grid.
 >
-> No existing IAM tool does this for AI agents operating on OT infrastructure.
+> No existing identity and access management tool does this
+> for AI agents on operational technology infrastructure.
 > That is the gap. That is what TARE fills."
 
 ---
@@ -294,11 +351,13 @@
 
 | Question | Answer |
 |---|---|
-| **"Is the AI agent actually making its own decisions?"** | "Yes. The rogue agent's path across all three zones — every command it tried — was its own reasoning. Nobody scripted that sequence. The LLM decided what to do based on its goal." |
-| **"What if TARE fires incorrectly — false positive?"** | "That's exactly what the supervisor decision is for. TARE never acts unilaterally on ambiguous cases. It freezes, explains, and waits for a human to decide. The Approve path exists for borderline cases." |
+| **"Is the AI agent actually making its own decisions?"** | "Yes. Every command sequence the agent chose — across all six scenarios — was its own reasoning. Nobody scripted those paths. The LLM decided what to do based on its goal." |
+| **"What if TARE fires incorrectly — false positive?"** | "That is exactly what the supervisor decision is for. TARE never acts unilaterally on ambiguous cases. It freezes, explains, and waits for a human. The Approve path exists for borderline cases — as we showed in the Escalation scenario." |
 | **"How does this scale to hundreds of agents?"** | "The gateway and detection engine are stateless per command — they scale horizontally. Phase 2 adds Azure Redis for distributed session state across any number of agents." |
-| **"Why Groq instead of OpenAI?"** | "Same LLM capability, lower latency for the demo. Production would use Azure OpenAI for compliance and data residency." |
-| **"Can the agent learn to evade TARE?"** | "Not in the current model — the agent doesn't know TARE exists and gets no feedback about why commands are denied. In Phase 2, the detection model retrains continuously to stay ahead of new patterns." |
+| **"Why Groq instead of OpenAI?"** | "Same capability, lower latency for the demo. Production would use Azure OpenAI for compliance and data residency." |
+| **"Can the agent learn to evade TARE?"** | "Not in the current model — the agent does not know TARE exists and gets no feedback on why commands are denied. The ML model retrains continuously in Phase 2 to stay ahead of new patterns." |
+| **"What is the ML model trained on?"** | "Six thousand synthetic sessions generated to match NERC CIP operational baselines and MITRE ATT&CK for ICS attack patterns — five classes: normal, rogue, slow & low, escalation, coordinated. 99%+ accuracy on the test set." |
+| **"How is this different from a CIEM engine?"** | "CIEM asks: does this identity have too many permissions? TARE asks: is this identity behaving correctly right now? CIEM is static analysis at provisioning time. TARE is real-time behavioural monitoring post-grant. Phase 3 adds CIEM-grade entitlement management purpose-built for AI agents — combining both layers." |
 | **"What happens if the grid has a real fault during a freeze?"** | "TARE preserves read-only and diagnostic access during FREEZE and DOWNGRADE. The supervisor can approve a time-box for specific operations within minutes. The design assumes the supervisor is always reachable." |
 | **"Is this patentable?"** | "The post-grant behavioural detection pattern for AI agents on OT infrastructure is novel. Worth a conversation with the IP team." |
 
@@ -307,31 +366,28 @@
 ## DEMO FLOW SUMMARY (Quick Reference Card)
 
 ```
-1. Open http://localhost:8012 — confirm NORMAL + LIVE
+Open http://localhost:8000 — confirm NORMAL + LIVE
 
-2. SCENARIO 1 — NORMAL
-   Click: 🤖 Agent: Fix Fault
-   Expected: GET_STATUS → SIMULATE_SWITCH → OPEN_BREAKER, all ALLOW
-   Z3 goes green. Mode stays NORMAL.
+1. 🤖 Fix Fault     → Z3 heals, mode stays NORMAL        (no action needed)
+   ↺ Reset
 
-3. RESET
+2. 🤖 Rogue         → TARE fires → ✕ Deny                (attack — deny)
+   ↺ Reset
 
-4. SCENARIO 2 — ROGUE
-   Click: 🤖 Agent: Rogue Task
-   Expected: Agent hits Z1/Z2, TARE fires, FREEZE → DOWNGRADE
-   LLM explanation appears. Click: ✕ Deny / Escalate
-   Mode goes SAFE. Incident escalated.
+3. 🕵 Clone         → All blocked at auth layer            (no action needed)
+   ↺ Reset
 
-5. RESET
+4. ⚡ Escalate      → Starts ALLOW → TARE fires → ✓ Approve  (show blast radius held)
+   ↺ Reset
 
-6. SCENARIO 3 — IMPERSONATOR
-   Click: 🕵 Agent: Impersonator
-   Expected: All DENY, POL-AUTH-001, nothing changes on grid
-   No zones attacked. No TARE fire. Pure auth block.
+5. 🔍 Slow&Low      → Rules silent → ML fires → ✕ Deny    (KEY: rules miss it)
+   ↺ Reset
+
+6. 🎯 Coord         → Two zones hit simultaneously → ✕ Deny
 ```
 
 ---
 
-*TARE AEGIS-ID — Demo Presentation Script*
+*TARE AEGIS-ID — Demo Presentation Script v3.0*
 *Energy & Utilities Security Platform — Internal Use Only*
-*Version: POC 1.0 — March 2026*
+*Updated: March 2026*

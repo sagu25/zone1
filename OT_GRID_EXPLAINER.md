@@ -201,6 +201,29 @@ running without human oversight or a system under attacker control.
 
 > *"A human operator doesn't try 32 commands in 30 seconds. A script does."*
 
+### Signal 5 — ML_ANOMALY
+The session pattern does not match any normal operator session in the
+training data. Detected by an ensemble of two models:
+
+- **IsolationForest** (unsupervised) — trained on normal sessions only.
+  Flags sessions that look statistically unusual compared to baseline.
+- **RandomForest** (supervised) — trained on 5 session classes:
+  normal, rogue, slow & low, escalation, coordinated.
+  Classifies which attack pattern the session most resembles.
+
+Combined score above 0.60 fires the ML_ANOMALY signal.
+
+> *"The behaviour is normal-looking on every individual rule — but the overall
+> pattern of the session matches known attack profiles the rules were never
+> designed to catch."*
+
+**The critical case — Slow & Low recon:**
+An agent that only reads status from every zone at normal pace triggers
+only one rule signal (OUT_OF_ZONE). Rules stay silent — one signal is
+below the threshold. The ML model sees the full session pattern and
+fires ML_ANOMALY. One rule + one ML = two signals → TARE fires.
+This is the attack that rules alone cannot catch.
+
 **TARE fires when 2 or more signals appear simultaneously.**
 That combination is the difference between an unusual event and
 a genuine threat.
@@ -241,7 +264,7 @@ a genuine threat.
 
 ## 10. One Line for Each Scenario
 
-**Normal agent:**
+**Fix Fault (legitimate):**
 > "Fault in Z3. Operator checks, simulates, opens BRK-301 safely.
 > Fault isolated. Grid restored. TARE watched and found nothing suspicious."
 
@@ -250,9 +273,23 @@ a genuine threat.
 > without simulation at burst speed. No legitimate operator would do this.
 > TARE catches it before any asset state changes."
 
-**Impersonator:**
+**Clone / Impersonator:**
 > "Forged token. Stopped before the first command runs.
-> No asset was ever at risk."
+> No asset was ever at risk. ServiceNow incident raised automatically."
+
+**Privilege Escalation:**
+> "Agent starts legitimately in Z3 — two commands allowed.
+> Mid-session it pivots to Z1 and Z2. TARE monitors the full session pattern.
+> The initial clean behaviour does not protect the agent once it deviates."
+
+**Slow & Low Reconnaissance:**
+> "Agent reads every asset across every zone at normal pace — only GET_STATUS.
+> Rules stay silent. ML model flags the session pattern as reconnaissance.
+> TARE catches the attack that rules alone cannot see."
+
+**Coordinated Attack:**
+> "Two agents hit Z1 and Z2 simultaneously.
+> TARE handles both vectors at once. One incident, full picture, both actors blocked."
 
 ---
 
@@ -405,4 +442,4 @@ The human resolves the ambiguity based on operational context TARE cannot see.
 
 *TARE AEGIS-ID — OT Grid Explainer*
 *Energy & Utilities Security Platform — Internal Use Only*
-*Version: POC 1.0 — March 2026*
+*Version: POC 3.0 — March 2026*
