@@ -42,11 +42,11 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
   const isAnomaly = anomalyZones.length > 0
 
   // Theme-aware SVG colors
-  const svgBg     = darkMode ? '#060b14'            : '#f4f6fb'
-  const dotColor  = darkMode ? '#1a2f4e'            : '#ccd6e8'
-  const zoneFill  = darkMode ? '#0a1525'            : '#ffffff'
-  const chipFill  = darkMode ? 'rgba(14,29,53,0.9)' : '#ffffff'
-  const labelText = darkMode ? '#2e5a8f'            : '#8da4bc'
+  const svgBg     = darkMode ? '#060b14'            : '#d4dcf0'
+  const dotColor  = darkMode ? '#1a2f4e'            : '#aab4d8'
+  const zoneFill  = darkMode ? '#0a1525'            : '#e6eaf8'
+  const chipFill  = darkMode ? 'rgba(14,29,53,0.9)' : 'rgba(220,228,248,0.96)'
+  const labelText = darkMode ? '#2e5a8f'            : '#6070a8'
 
   return (
     <div className="panel zone-panel">
