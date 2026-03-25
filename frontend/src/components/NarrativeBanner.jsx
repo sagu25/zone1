@@ -76,20 +76,22 @@ function getNarrative(mode, agent, signals, incident) {
   }
 }
 
+const PIPELINE = MODE_ORDER.filter(m => m !== 'NORMAL')
+
 export default function NarrativeBanner({ mode, agent, signals, incident }) {
-  const currentIdx = MODE_ORDER.indexOf(mode)
+  const currentIdx = PIPELINE.indexOf(mode)
   const level      = LEVEL_MAP[mode] || 'ok'
   const narrative  = getNarrative(mode, agent, signals, incident)
 
   return (
     <div className={`narrative-banner banner-${level}`}>
 
-      {/* Lifecycle pipeline */}
+      {/* Lifecycle pipeline — NORMAL is shown in header badge, start from FREEZE */}
       <div className="lc-pipeline">
-        {MODE_ORDER.map((m, i) => {
+        {PIPELINE.map((m, i) => {
           const meta      = MODE_META[m]
           const isCurrent = i === currentIdx
-          const isPast    = i < currentIdx
+          const isPast    = currentIdx >= 0 && i < currentIdx
           const cls       = [
             'lc-step',
             isCurrent ? `lc-current lc-${m}` : isPast ? 'lc-past' : 'lc-future',
@@ -99,7 +101,7 @@ export default function NarrativeBanner({ mode, agent, signals, incident }) {
               <span className={cls}>
                 {isPast ? '✓' : meta.icon}&nbsp;{meta.label}
               </span>
-              {i < MODE_ORDER.length - 1 && (
+              {i < PIPELINE.length - 1 && (
                 <span className="lc-arrow">›</span>
               )}
             </span>

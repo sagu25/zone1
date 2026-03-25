@@ -50,7 +50,8 @@ OPERATOR_AGENT = {
     "role":           "GRID_OPERATOR",
     "clearance":      "LEVEL_3",
     "department":     "Grid Operations",
-    "rbac_zones":     ["Z3"],           # Only authorised for Z3 (fault zone)
+    "rbac_zones":     ["Z1", "Z2", "Z3"],   # Cleared for all three zones
+    "assigned_zone":  "Z3",                  # Active work order: Z3 fault repair
     "rbac_token":     "eyJhbGciOiJSUzI1NiJ9.TARE-MOCK-TOKEN",
     "status":         "ACTIVE",
     "action_count":   0,
@@ -374,11 +375,12 @@ class TAREEngine:
                 "severity": "HIGH",
             })
 
-        # Signal 2 — Out-of-zone RBAC
-        if zone not in self.agent["rbac_zones"]:
+        # Signal 2 — Outside active task zone (agent has clearance, but no work order here)
+        assigned = self.agent.get("assigned_zone", "Z3")
+        if zone != assigned:
             signals.append({
                 "signal":   "OUT_OF_ZONE",
-                "detail":   f"Agent RBAC covers {self.agent['rbac_zones']} — attempted {zone}",
+                "detail":   f"Active task zone is {assigned} (fault repair) — no work order for {zone}",
                 "severity": "HIGH",
             })
 
@@ -459,30 +461,23 @@ class TAREEngine:
             cmd_text = "\n".join(f"- {c['command']} on {c['asset_id']} in {c['zone']}" for c in recent_commands[-5:])
             agent_name     = self.agent.get("name", "GridOperator-Agent")
             agent_id       = self.agent.get("id", "OP-GRID-7749")
+            assigned_zone  = self.agent.get("assigned_zone", "Z3")
             rbac_zones     = self.agent.get("rbac_zones", [])
-            attacked_zones = list({c["zone"] for c in recent_commands if c["zone"] not in rbac_zones})
+            attacked_zones = list({c["zone"] for c in recent_commands if c["zone"] != assigned_zone})
             rbac_str       = ", ".join(rbac_zones) if rbac_zones else "none"
             attacked_str   = ", ".join(attacked_zones) if attacked_zones else "none detected"
 
-            prompt = f"""You are TARE, a Trusted Access Response Engine for an energy grid.
-You have just frozen high-impact grid operations by agent "{agent_name}" (ID: {agent_id}).
+            prompt = f"""You are TARE, a Trusted Access Response Engine for an energy grid security platform.
+A behavioural anomaly has been detected and you have frozen high-impact operations. Brief the human supervisor.
 
-Agent RBAC authorisation: {rbac_str} only.
-Zones targeted outside authorisation: {attacked_str}.
+RAW EVIDENCE:
+Agent: {agent_name} (ID: {agent_id})
+Clearance zones: {rbac_str}
+Active work order: {assigned_zone}
+Anomaly signals fired: {sig_text}
+Recent commands: {cmd_text}
 
-Deviation signals detected:
-{sig_text}
-
-Recent commands issued by the agent:
-{cmd_text}
-
-Write a concise explanation (3-4 sentences) for the human supervisor that:
-1. Names the agent correctly as "{agent_name}" — do NOT call it "RBAC" or any other term
-2. States exactly which zones were accessed outside authorisation (list all of them, not just one)
-3. Confirms the agent had valid credentials throughout — this is a post-grant behavioural anomaly
-4. Explains what TARE has done (freeze + downgrade to read-only) and asks the supervisor to review the evidence before deciding whether to approve a time-box or escalate
-
-Speak directly as TARE. Be precise, professional, and specific. Do not use bullet points."""
+Write a 3-4 sentence briefing for the supervisor. Include: what the agent did, why it is suspicious given its work order, what TARE has done in response, and what decision the supervisor must make (approve a 3-minute time-box or deny and escalate). Be specific about zones and commands. Do not use bullet points."""
 
             for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
                 try:
@@ -503,16 +498,17 @@ Speak directly as TARE. Be precise, professional, and specific. Do not use bulle
             return self._static_explain(signals)
 
     def _static_explain(self, signals):
-        agent_name  = self.agent.get("name", "GridOperator-Agent")
-        rbac_zones  = self.agent.get("rbac_zones", [])
-        recent      = list(self.command_history)[-20:]
-        attacked    = list({c["zone"] for c in recent if c["zone"] not in rbac_zones})
-        sig_names   = ", ".join(s["signal"] for s in signals)
-        zones_str   = ", ".join(attacked) if attacked else "outside authorised scope"
+        agent_name    = self.agent.get("name", "GridOperator-Agent")
+        assigned_zone = self.agent.get("assigned_zone", "Z3")
+        recent        = list(self.command_history)[-20:]
+        off_task      = list({c["zone"] for c in recent if c["zone"] != assigned_zone})
+        sig_names     = ", ".join(s["signal"] for s in signals)
+        zones_str     = ", ".join(off_task) if off_task else "zones outside active task"
         return (
             f"{agent_name} has been frozen due to behavioural anomalies: {sig_names}. "
-            f"The agent holds valid credentials but operated outside its RBAC authorisation — "
-            f"issuing high-impact commands in {zones_str} (authorised zone: {', '.join(rbac_zones)}). "
+            f"The agent has valid credentials and clearance for all zones, but its active work order "
+            f"is {assigned_zone} (fault repair). It accessed {zones_str}, which have no active fault "
+            f"and no work order requiring action there. "
             f"TARE has applied FREEZE and downgraded access to read-only. "
             f"Please review the evidence and decide whether to approve a 3-minute time-box or escalate."
         )

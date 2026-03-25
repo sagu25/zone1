@@ -6,7 +6,7 @@ import ZoneObservatory from './components/ZoneObservatory'
 import LeftPanel       from './components/LeftPanel'
 import RightPanel      from './components/RightPanel'
 
-const WS_URL = `ws://${window.location.hostname}:${window.location.port}/ws`
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
 
 const INITIAL_STATE = {
   mode:           'NORMAL',
@@ -52,8 +52,14 @@ export default function App() {
   const [wsConnected, setWsConnected] = useState(false)
   const [showApprove, setShowApprove] = useState(false)
   const [showFlash,   setShowFlash]   = useState(false)
+  const [darkMode,    setDarkMode]    = useState(() => localStorage.getItem('tare-theme') !== 'light')
   const wsRef      = useRef(null)
   const prevModeRef = useRef('NORMAL')
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    localStorage.setItem('tare-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   const addFeed = useCallback((level, source, message) => {
     setFeedItems(prev => [mkFeed(level, source, message), ...prev].slice(0, 300))
@@ -158,6 +164,8 @@ export default function App() {
           stats={snap.stats}
           timeboxRemaining={snap.timebox_remaining}
           timeboxTotal={snap.timebox_total}
+          darkMode={darkMode}
+          onToggleTheme={() => setDarkMode(d => !d)}
           onReset={()        => post('/reset')}
           onAgentNormal={()        => post('/agent/normal')}
           onAgentRogue={()         => post('/agent/rogue')}
@@ -183,7 +191,7 @@ export default function App() {
 
           {/* CENTRE COL */}
           <div className="col-centre">
-            <ZoneObservatory zones={snap.zones} assets={snap.assets} accessLog={snap.zone_access_log} mode={snap.mode} />
+            <ZoneObservatory zones={snap.zones} assets={snap.assets} accessLog={snap.zone_access_log} mode={snap.mode} darkMode={darkMode} />
             <CommandGateway  log={snap.gateway_log} />
           </div>
 

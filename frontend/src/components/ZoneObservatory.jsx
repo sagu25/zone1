@@ -1,15 +1,14 @@
-// Zone positions in a 580 × 200 viewBox
-// Z3 (FAULT) = top-centre, Z2 = bottom-left, Z1 = bottom-right
+// Zone positions — Z3 top-centre, Z2 bottom-left, Z1 bottom-right
 const ZONE_POS = {
-  Z3: { cx: 290, cy: 52 },
-  Z2: { cx: 100, cy: 160 },
-  Z1: { cx: 480, cy: 160 },
+  Z3: { cx: 290, cy: 70  },
+  Z2: { cx:  85, cy: 195 },
+  Z1: { cx: 495, cy: 195 },
 }
 
+// Only two links — Z3 feeds Z2 and Z1. No Z2→Z1 horizontal (removes extra arrow).
 const LINKS = [
   { from:'Z3', to:'Z2', id:'l32' },
   { from:'Z3', to:'Z1', id:'l31' },
-  { from:'Z2', to:'Z1', id:'l21' },
 ]
 
 const ASSETS_BY_ZONE = {
@@ -32,7 +31,7 @@ function stateColor(state) {
 
 const THREAT_MODES = new Set(['FREEZE', 'DOWNGRADE', 'TIMEBOX_ACTIVE'])
 
-export default function ZoneObservatory({ zones, assets, accessLog, mode }) {
+export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMode = true }) {
   if (!zones || !assets) return null
 
   // Only show anomaly highlighting when TARE is actively in a threat mode
@@ -41,6 +40,13 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode }) {
     : []
 
   const isAnomaly = anomalyZones.length > 0
+
+  // Theme-aware SVG colors
+  const svgBg     = darkMode ? '#060b14'            : '#f4f6fb'
+  const dotColor  = darkMode ? '#1a2f4e'            : '#ccd6e8'
+  const zoneFill  = darkMode ? '#0a1525'            : '#ffffff'
+  const chipFill  = darkMode ? 'rgba(14,29,53,0.9)' : '#ffffff'
+  const labelText = darkMode ? '#2e5a8f'            : '#8da4bc'
 
   return (
     <div className="panel zone-panel">
@@ -53,11 +59,11 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode }) {
       </div>
 
       <div className="zone-svg-wrap">
-        <svg viewBox="0 0 580 210" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 580 280" xmlns="http://www.w3.org/2000/svg">
           <defs>
             {/* Background dot-grid */}
             <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
-              <circle cx="1" cy="1" r="0.7" fill="#1a2f4e" opacity="0.6" />
+              <circle cx="1" cy="1" r="0.7" fill={dotColor} opacity="0.6" />
             </pattern>
 
             {/* Normal flow gradient */}
@@ -82,11 +88,12 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode }) {
           </defs>
 
           {/* Background */}
-          <rect width="580" height="210" fill="url(#dotGrid)" />
+          <rect width="580" height="280" fill={svgBg} />
+          <rect width="580" height="280" fill="url(#dotGrid)" />
 
           {/* Corner tags */}
-          <text x="6" y="12" className="zone-lbl" style={{ textAnchor:'start', fontSize:'7px' }}>TARE GRID MAP</text>
-          <text x="574" y="12" className="zone-lbl" style={{ textAnchor:'end', fontSize:'7px' }}>CLASSIFICATION: RESTRICTED</text>
+          <text x="6" y="12" className="zone-lbl" style={{ textAnchor:'start', fontSize:'7px', fill: labelText }}>TARE GRID MAP</text>
+          <text x="574" y="12" className="zone-lbl" style={{ textAnchor:'end', fontSize:'7px', fill: labelText }}>CLASSIFICATION: RESTRICTED</text>
 
           {/* Power lines between zones */}
           {LINKS.map(link => {
@@ -94,7 +101,7 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode }) {
             const b = ZONE_POS[link.to]
             const dx = b.cx - a.cx; const dy = b.cy - a.cy
             const len = Math.sqrt(dx*dx + dy*dy)
-            const r = 34
+            const r = 44
             const x1 = a.cx + (dx/len)*r
             const y1 = a.cy + (dy/len)*r
             const x2 = b.cx - (dx/len)*r
@@ -129,15 +136,15 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode }) {
             return (
               <g key={zone.id}>
                 {/* Outer glow ring */}
-                <circle cx={pos.cx} cy={pos.cy} r={38}
+                <circle cx={pos.cx} cy={pos.cy} r={50}
                   fill={col.fill}
                   style={{ filter: col.glow, animation: isAttacked ? 'subPulse 0.5s ease-in-out infinite' : zone.health === 'FAULT' ? 'subPulse 2s ease-in-out infinite' : 'none' }}
                 />
                 {/* Zone circle */}
-                <circle cx={pos.cx} cy={pos.cy} r={30}
-                  fill="#0a1525"
+                <circle cx={pos.cx} cy={pos.cy} r={40}
+                  fill={zoneFill}
                   stroke={col.stroke}
-                  strokeWidth={isAttacked ? 2.5 : 1.8}
+                  strokeWidth={isAttacked ? 3 : 2}
                   style={{ transition: 'stroke 0.3s' }}
                 />
 
@@ -151,29 +158,32 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode }) {
                 {/* Attack target badge */}
                 {isAttacked && (
                   <g>
-                    <rect x={pos.cx - 36} y={pos.cy - 52} width={72} height={14} rx={3}
+                    <rect x={pos.cx - 36} y={pos.cy - 64} width={72} height={14} rx={3}
                       fill="rgba(255,45,45,0.15)" stroke="rgba(255,45,45,0.6)" strokeWidth={1}
                       style={{ animation: 'subPulse 0.5s step-end infinite' }}
                     />
-                    <text x={pos.cx} y={pos.cy - 42}
+                    <text x={pos.cx} y={pos.cy - 54}
                       style={{ fontFamily:'var(--font-mono)', fontSize:'6.5px', fill:'#ff2d2d', fontWeight:700, textAnchor:'middle', letterSpacing:'0.1em' }}>
                       ANOMALY TARGET
                     </text>
                   </g>
                 )}
 
-                {/* Asset mini-chips below zone */}
+                {/* Asset mini-chips — Z3 goes sideways, Z2/Z1 go below */}
                 {zAssets.map((aid, i) => {
                   const ast = assets[aid]
                   if (!ast) return null
-                  const ax = pos.cx + (i === 0 ? -28 : 28)
-                  const ay = pos.cy + 44
+                  const isZ3 = zone.id === 'Z3'
+                  const ax = isZ3
+                    ? pos.cx + (i === 0 ? -75 : 75)   // left/right of Z3
+                    : pos.cx + (i === 0 ? -32 : 32)    // below Z2/Z1
+                  const ay = isZ3 ? pos.cy : pos.cy + 56
                   return (
                     <g key={aid}>
-                      <rect x={ax - 22} y={ay - 9} width={44} height={16} rx={3}
-                        fill="rgba(14,29,53,0.9)" stroke={stateColor(ast.state)} strokeWidth={0.8} />
-                      <text x={ax} y={ay - 1} className="asset-lbl">{aid}</text>
-                      <text x={ax} y={ay + 7} className="asset-state" fill={stateColor(ast.state)}>{ast.state}</text>
+                      <rect x={ax - 30} y={ay - 12} width={60} height={24} rx={4}
+                        fill={chipFill} stroke={stateColor(ast.state)} strokeWidth={1.2} />
+                      <text x={ax} y={ay - 2} className="asset-lbl">{aid}</text>
+                      <text x={ax} y={ay + 9} className="asset-state" fill={stateColor(ast.state)}>{ast.state}</text>
                     </g>
                   )
                 })}
@@ -186,7 +196,7 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode }) {
             fill="rgba(0,232,124,0.06)" stroke="rgba(0,232,124,0.2)" strokeWidth={0.8} />
           <text x={290} y={13}
             style={{ fontFamily:'var(--font-mono)', fontSize:'6.5px', fill:'#00e87c', fontWeight:700, textAnchor:'middle', letterSpacing:'0.08em' }}>
-            AGENT RBAC: Z3 ONLY
+            ACTIVE TASK: Z3 · CLEARED: ALL ZONES
           </text>
         </svg>
       </div>

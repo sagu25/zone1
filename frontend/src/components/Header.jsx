@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const MODE_META = {
   NORMAL:       { label:'NORMAL',        cls:'mode-normal',    icon:'◉' },
@@ -15,11 +15,32 @@ function fmtTime(secs) {
   return `${m}:${String(s).padStart(2,'0')}`
 }
 
+const SCENARIOS = [
+  { label: '🤖 Fix Fault',  cls: 'hbtn-ai-green',  title: 'Legitimate fault repair agent',     key: 'normal' },
+  { label: '🤖 Rogue',      cls: 'hbtn-ai-red',    title: 'Rogue agent attack',                key: 'rogue' },
+  { label: '🕵 Clone',      cls: 'hbtn-ai-ghost',  title: 'Identity impersonation attack',     key: 'clone' },
+  { label: '⚡ Escalate',   cls: 'hbtn-ai-orange', title: 'Privilege escalation attack',       key: 'escalation' },
+  { label: '🔍 Slow&Low',   cls: 'hbtn-ai-yellow', title: 'Slow & low reconnaissance',         key: 'slowlow' },
+  { label: '🎯 Coord',      cls: 'hbtn-ai-purple', title: 'Coordinated multi-agent attack',    key: 'coordinated' },
+]
+
 export default function Header({ wsConnected, mode, stats, timeboxRemaining, timeboxTotal,
+  darkMode, onToggleTheme,
   onReset, onAgentNormal, onAgentRogue, onAgentImpersonator,
   onAgentCoordinated, onAgentEscalation, onAgentSlowLow }) {
   const [now, setNow] = useState(new Date())
+  const [ddOpen, setDdOpen] = useState(false)
+  const ddRef = useRef(null)
+
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
+
+  useEffect(() => {
+    function handleClick(e) { if (ddRef.current && !ddRef.current.contains(e.target)) setDdOpen(false) }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const HANDLERS = { normal: onAgentNormal, rogue: onAgentRogue, clone: onAgentImpersonator, escalation: onAgentEscalation, slowlow: onAgentSlowLow, coordinated: onAgentCoordinated }
 
   const meta    = MODE_META[mode] || MODE_META.NORMAL
   const pct     = timeboxTotal > 0 && timeboxRemaining != null ? (timeboxRemaining / timeboxTotal) * 100 : 0
@@ -56,19 +77,32 @@ export default function Header({ wsConnected, mode, stats, timeboxRemaining, tim
 
       {/* Controls */}
       <div className="hdr-controls">
-        <button className="hbtn hbtn-ai-green"  onClick={onAgentNormal}       disabled={!wsConnected} title="Legitimate fault repair agent">🤖 Fix Fault</button>
+        {/* Scenarios dropdown */}
+        <div className="scenario-dd" ref={ddRef}>
+          <button className="hbtn hbtn-dd" disabled={!wsConnected} onClick={() => setDdOpen(o => !o)}>
+            ▶ Demo Scenarios {ddOpen ? '▲' : '▼'}
+          </button>
+          {ddOpen && (
+            <div className="dd-menu">
+              {SCENARIOS.map(s => (
+                <button key={s.key} className={`dd-item hbtn ${s.cls}`} title={s.title}
+                  disabled={!wsConnected}
+                  onClick={() => { HANDLERS[s.key]?.(); setDdOpen(false) }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="btn-divider" />
-        <button className="hbtn hbtn-ai-red"    onClick={onAgentRogue}        disabled={!wsConnected} title="Rogue agent attack">🤖 Rogue</button>
-        <button className="hbtn hbtn-ai-ghost"  onClick={onAgentImpersonator} disabled={!wsConnected} title="Identity impersonation attack">🕵 Clone</button>
-        <button className="hbtn hbtn-ai-orange" onClick={onAgentEscalation}   disabled={!wsConnected} title="Privilege escalation attack">⚡ Escalate</button>
-        <button className="hbtn hbtn-ai-yellow" onClick={onAgentSlowLow}      disabled={!wsConnected} title="Slow & low reconnaissance">🔍 Slow&amp;Low</button>
-        <button className="hbtn hbtn-ai-purple" onClick={onAgentCoordinated}  disabled={!wsConnected} title="Coordinated multi-agent attack">🎯 Coord</button>
-        <div className="btn-divider" />
-        <button className="hbtn hbtn-ghost"     onClick={onReset}             disabled={!wsConnected} title="Reset system">↺ Reset</button>
+        <button className="hbtn hbtn-ghost" onClick={onReset} disabled={!wsConnected} title="Reset system">↺ Reset</button>
       </div>
 
       {/* Status + clock */}
       <div className="hdr-right">
+        <button className="theme-toggle" onClick={onToggleTheme} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {darkMode ? '☀' : '☾'}
+        </button>
         <span className={`ws-dot ${wsConnected ? 'on' : 'off'}`} />
         <span className="ws-label">{wsConnected ? 'LIVE' : 'OFFLINE'}</span>
         <span className="hdr-clock">{dateStr} &nbsp; {timeStr} UTC</span>
