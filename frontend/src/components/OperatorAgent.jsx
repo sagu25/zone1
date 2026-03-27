@@ -1,3 +1,5 @@
+import { ZONE_DISPLAY } from './ZoneInfoModal'
+
 const STATUS_CLS = {
   ACTIVE:    'agent-active',
   ANOMALOUS: 'agent-anomalous',
@@ -32,14 +34,14 @@ export default function OperatorAgent({ agent }) {
         {(agent.rbac_zones || []).map(z => (
           <span key={z} className={`zone-chip ${z === agent.assigned_zone ? 'chip-task' : 'chip-auth'}`}
             title={z === agent.assigned_zone ? 'Active work order' : 'Cleared — no active fault'}>
-            {z}{z === agent.assigned_zone ? ' ★' : ''}
+            {ZONE_DISPLAY[z] || z}{z === agent.assigned_zone ? ' ★' : ''}
           </span>
         ))}
       </div>
       {agent.assigned_zone && (
         <div className="rbac-row" style={{ marginTop: 2 }}>
           <span className="rbac-label">Active Task</span>
-          <span className="zone-chip chip-task">{agent.assigned_zone} — fault repair</span>
+          <span className="zone-chip chip-task">{ZONE_DISPLAY[agent.assigned_zone] || agent.assigned_zone} — fault repair</span>
         </div>
       )}
 

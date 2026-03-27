@@ -5,6 +5,7 @@ import CommandGateway  from './components/CommandGateway'
 import ZoneObservatory from './components/ZoneObservatory'
 import LeftPanel       from './components/LeftPanel'
 import RightPanel      from './components/RightPanel'
+import ZoneInfoModal   from './components/ZoneInfoModal'
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
 
@@ -53,6 +54,7 @@ export default function App() {
   const [showApprove, setShowApprove] = useState(false)
   const [showFlash,   setShowFlash]   = useState(false)
   const [darkMode,    setDarkMode]    = useState(() => localStorage.getItem('tare-theme') !== 'light')
+  const [zoneModal,   setZoneModal]   = useState(null)   // zone ID string or null
   const wsRef      = useRef(null)
   const prevModeRef = useRef('NORMAL')
 
@@ -157,6 +159,14 @@ export default function App() {
   return (
     <div className="app-root">
       {showFlash && <div className="tare-flash" />}
+      {zoneModal && (
+        <ZoneInfoModal
+          zoneId={zoneModal}
+          zones={snap.zones}
+          assets={snap.assets}
+          onClose={() => setZoneModal(null)}
+        />
+      )}
       <div className="app-layout">
         <Header
           wsConnected={wsConnected}
@@ -191,8 +201,8 @@ export default function App() {
 
           {/* CENTRE COL */}
           <div className="col-centre">
-            <ZoneObservatory zones={snap.zones} assets={snap.assets} accessLog={snap.zone_access_log} mode={snap.mode} darkMode={darkMode} />
-            <CommandGateway  log={snap.gateway_log} />
+            <ZoneObservatory zones={snap.zones} assets={snap.assets} accessLog={snap.zone_access_log} mode={snap.mode} darkMode={darkMode} onZoneClick={setZoneModal} />
+            <CommandGateway  log={snap.gateway_log} onZoneClick={setZoneModal} />
           </div>
 
           {/* RIGHT COL */}

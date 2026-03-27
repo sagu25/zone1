@@ -1,3 +1,5 @@
+import { ZONE_DISPLAY } from './ZoneInfoModal'
+
 const DEC_CLS = { ALLOW:'dec-allow', DENY:'dec-deny' }
 
 function fmtTs(ts) {
@@ -5,7 +7,7 @@ function fmtTs(ts) {
   return ts.slice(11, 19)
 }
 
-export default function CommandGateway({ log }) {
+export default function CommandGateway({ log, onZoneClick }) {
   return (
     <div className="panel gw-panel">
       <div className="panel-title"><span className="panel-icon">🛡</span> Command Gateway (PEP)</div>
@@ -32,7 +34,16 @@ export default function CommandGateway({ log }) {
                   <td className="gw-ts">{fmtTs(e.ts)}</td>
                   <td className="gw-cmd">{e.command}</td>
                   <td className="gw-asset">{e.asset_id}</td>
-                  <td className="gw-zone">{e.zone}</td>
+                  <td>
+                    <button
+                      className="gw-zone-btn"
+                      onClick={() => onZoneClick?.(e.zone)}
+                      title="Click to learn about this zone"
+                    >
+                      {ZONE_DISPLAY[e.zone] || e.zone}
+                      <span className="gw-zone-hint">ℹ</span>
+                    </button>
+                  </td>
                   <td><span className={`dec-badge ${DEC_CLS[e.decision]}`}>{e.decision}</span></td>
                   <td className="gw-policy">{e.policy}</td>
                   <td className="gw-mode">{e.mode}</td>

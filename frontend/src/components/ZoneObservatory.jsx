@@ -1,3 +1,5 @@
+import { ZONE_DISPLAY } from './ZoneInfoModal'
+
 // Zone positions — Z3 top-centre, Z2 bottom-left, Z1 bottom-right
 const ZONE_POS = {
   Z3: { cx: 290, cy: 70  },
@@ -31,7 +33,7 @@ function stateColor(state) {
 
 const THREAT_MODES = new Set(['FREEZE', 'DOWNGRADE', 'TIMEBOX_ACTIVE'])
 
-export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMode = true }) {
+export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMode = true, onZoneClick }) {
   if (!zones || !assets) return null
 
   // Only show anomaly highlighting when TARE is actively in a threat mode
@@ -148,8 +150,12 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
                   style={{ transition: 'stroke 0.3s' }}
                 />
 
-                {/* Zone ID */}
-                <text x={pos.cx} y={pos.cy - 6} className="zone-id-lbl" fill={col.text}>{zone.id}</text>
+                {/* Zone ID — clickable */}
+                <text x={pos.cx} y={pos.cy - 6} className="zone-id-lbl zone-id-clickable" fill={col.text}
+                  onClick={() => onZoneClick?.(zone.id)}
+                  style={{ cursor: 'pointer' }}>
+                  {ZONE_DISPLAY[zone.id] || zone.id}
+                </text>
                 {/* Health */}
                 <text x={pos.cx} y={pos.cy + 8} className="zone-hlth" fill={col.text} opacity={0.8}>
                   {zone.health === 'FAULT' ? '⚠ FAULT' : isAttacked ? '⚡ ATTACKED' : '✓ HEALTHY'}
