@@ -245,8 +245,8 @@ for each scenario and mode change. Designed for a non-technical audience.
 - **INCIDENT tab** — ServiceNow ticket auto-created when TARE fires (auto-switches on incident)
 
 ### Centre Column
-- **Zone Observatory** — live OT/SCADA grid map. Zones pulse red when attacked.
-- **Command Gateway** — every command logged with timestamp, asset, zone, decision, policy, mode
+- **Zone Observatory** — live OT/SCADA grid map. Zones pulse red when attacked. Click any zone circle to open a plain-English info card (zone purpose, assets, sensitivity).
+- **Command Gateway** — every command logged with timestamp, asset, zone, decision, policy, mode. Hover over a zone pill to preview it; click to open the full zone info card.
 
 ### Right Column — 2 tabs
 - **TARE Assistant tab** — LLM-generated plain-English explanation for supervisor
@@ -283,12 +283,31 @@ You only need to rebuild if you change files in `frontend/src/`.
 
 Requirements: Node.js 16 or higher.
 
+**Option A — Build for production (recommended for demos):**
 ```
 cd C:\Users\Admin\Desktop\Aegis\aegis-poc\frontend
 npm install          (first time only)
 npm run build
 cp -r dist/. ../backend/static/
 ```
+Then open `http://localhost:8000` as normal.
+
+**Option B — Dev mode with hot-reload (for editing source code):**
+
+Start the backend first (Terminal 1):
+```
+cd C:\Users\Admin\Desktop\Aegis\aegis-poc\backend
+python -m uvicorn main:app --port 8000 --host 0.0.0.0
+```
+
+Then start the frontend dev server (Terminal 2):
+```
+cd C:\Users\Admin\Desktop\Aegis\aegis-poc\frontend
+npm install          (first time only)
+npm run dev
+```
+
+Open `http://localhost:5173` — the Vite proxy forwards all WebSocket and API calls to the backend on port 8000 automatically. Changes to `frontend/src/` files reload instantly without rebuilding.
 
 ---
 
@@ -306,7 +325,8 @@ Ctrl + C
 | Problem | Fix |
 |---|---|
 | **● OFFLINE in top right** | Backend not running. Run uvicorn command again. |
-| **Blank page in browser** | Wrong URL. Make sure you are on `http://localhost:PORT` not 5173. |
+| **● OFFLINE when using `npm run dev`** | Backend must also be running on port 8000. Start uvicorn in a separate terminal first. |
+| **Blank page in browser** | Wrong URL. Use `http://localhost:8000` (production) or `http://localhost:5173` (dev mode). |
 | **Port already in use** | Increment port number. See Port Conflict section above. |
 | **AI Agent buttons do nothing** | Groq API key not set. Check `backend/.env` exists and key is correct. |
 | **Agent halted: 401** | Groq key invalid or expired. Get a new one from console.groq.com. |
@@ -356,6 +376,6 @@ URL changes to match: http://localhost:8001
 
 ---
 
-*TARE AEGIS-ID — Setup & Run Guide v3.0*
+*TARE AEGIS-ID — Setup & Run Guide v3.1*
 *Energy & Utilities Security Platform — Internal Use Only*
 *Updated: March 2026*
