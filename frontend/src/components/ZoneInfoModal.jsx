@@ -1,75 +1,78 @@
 // Zone display names and rich info for non-technical audiences
 export const ZONE_DISPLAY = { Z1: 'Zone 1', Z2: 'Zone 2', Z3: 'Zone 3' }
 
-const ZONE_INFO = {
+export const ZONE_INFO = {
   Z1: {
     display:     'Zone 1 — North Grid',
-    region:      'Northern Industrial District',
-    type:        'Industrial',
-    typeColor:   '#00d4ff',
-    description: 'Powers the northern industrial corridor — manufacturing plants, warehouses and logistics hubs. This zone handles the heaviest power loads on the entire grid and runs 24/7 to support continuous production operations.',
+    region:      'Northern Critical Infrastructure District',
+    type:        'Critical',
+    typeColor:   '#ff4d6d',
+    description: 'HIGHEST PRIORITY — directly powers hospitals, emergency response centres, and national data centres in the northern district. A fault here triggers an immediate P1 incident. Any action on this zone requires senior approval and strict safety protocols.',
     assets: [
-      { id: 'BRK-110', type: 'Circuit Breaker',    role: 'Automatically isolates electrical faults to prevent failures from cascading across the northern grid. Think of it as a safety switch that cuts power when something goes wrong.' },
-      { id: 'FDR-110', type: 'Feeder Controller',  role: 'Regulates and distributes power from the main substation to each industrial consumer. It acts like a smart traffic controller for electricity flow.' },
+      { id: 'BRK-110', type: 'Circuit Breaker',   role: 'Guards life-critical infrastructure. Breaker operation here must follow mandatory safety simulation — skipping this step is a serious violation that can cut power to hospitals and emergency services.' },
+      { id: 'FDR-110', type: 'Feeder Controller', role: 'Maintains stable, uninterrupted power to hospitals, 999 emergency dispatch and government data centres. A restart here requires supervisor sign-off due to direct risk to human life.' },
     ],
   },
   Z2: {
     display:     'Zone 2 — East Grid',
     region:      'Eastern Commercial & Residential District',
-    type:        'Commercial',
-    typeColor:   '#00e87c',
-    description: 'Serves the eastern commercial hub and residential estates — office towers, shopping centres, hospitals and thousands of homes. Disruption here directly affects daily life for a large urban population.',
+    type:        'Sensitive',
+    typeColor:   '#ff9a3c',
+    description: 'Medium-priority zone covering the eastern commercial hub and residential areas — office towers, shopping centres and thousands of homes. Disruption here has wide public impact and must be handled with care.',
     assets: [
-      { id: 'BRK-205', type: 'Circuit Breaker',    role: 'Protects the eastern grid from overloads and short circuits, especially during peak demand hours. Prevents a single fault from blacking out the entire district.' },
-      { id: 'FDR-205', type: 'Feeder Controller',  role: 'Balances electricity load across the eastern network in real time, preventing brownouts and ensuring stable voltage for sensitive equipment.' },
+      { id: 'BRK-205', type: 'Circuit Breaker',   role: 'Protects the eastern grid from overloads during peak demand. Prevents a single fault from blacking out the entire commercial and residential district.' },
+      { id: 'FDR-205', type: 'Feeder Controller', role: 'Balances electricity load across the eastern network in real time, preventing voltage drops and ensuring stable power for offices, shops and homes.' },
     ],
   },
   Z3: {
     display:     'Zone 3 — West Grid',
-    region:      'Western Critical Services District',
-    type:        'Critical',
-    typeColor:   '#ff8c00',
-    description: 'Highest-priority zone — directly supplies hospitals, emergency services, and data centres in the western district. Any fault here is treated as a critical incident. This is the active fault zone in the current scenario.',
+    region:      'Western Industrial & Logistics District',
+    type:        'Operational',
+    typeColor:   '#00d4ff',
+    description: 'Lower-priority operational zone serving the western industrial corridor — manufacturing plants, warehouses and logistics hubs. This is the ACTIVE FAULT ZONE in the current scenario. The AI agent is authorised to investigate and restore it.',
     assets: [
-      { id: 'BRK-301', type: 'Circuit Breaker',    role: 'Isolating a fault here protects life-critical services. Controlled breaker operation must follow strict safety simulation before execution — no shortcuts allowed.' },
-      { id: 'FDR-301', type: 'Feeder Controller',  role: 'Keeps power stable for hospitals and emergency dispatch centres even under grid stress. A restart here requires supervisor approval due to risk to critical services.' },
+      { id: 'BRK-301', type: 'Circuit Breaker',   role: 'Controls power isolation for the western industrial grid. The current voltage fault on this breaker is what the AI agent has been tasked to investigate and resolve.' },
+      { id: 'FDR-301', type: 'Feeder Controller', role: 'Distributes power across the western industrial zone. It supports the manufacturing load but — unlike Zone 1 — a temporary restart here carries lower risk to public safety.' },
     ],
   },
 }
 
-// SVG illustrations — simple, clean, recognisable for non-technical viewers
-function ZoneIllustration({ zoneId, color }) {
+// SVG illustrations — exported so hover tooltip can reuse them
+export function ZoneIllustration({ zoneId, color }) {
+  // Z1 — Critical / Hospital (most sensitive)
   if (zoneId === 'Z1') return (
     <svg viewBox="0 0 160 100" width="160" height="100">
-      {/* Factory — industrial zone */}
-      <rect x="20" y="52" width="120" height="44" fill="none" stroke={color} strokeWidth="2.5" rx="2"/>
-      {/* Smokestacks */}
-      <rect x="32" y="24" width="14" height="30" fill="none" stroke={color} strokeWidth="2"/>
-      <rect x="57" y="12" width="14" height="42" fill="none" stroke={color} strokeWidth="2"/>
-      <rect x="82" y="18" width="14" height="36" fill="none" stroke={color} strokeWidth="2"/>
-      {/* Smoke puffs */}
-      <circle cx="39" cy="20" r="5" fill="none" stroke={color} strokeWidth="1.5" opacity="0.5"/>
-      <circle cx="64" cy="8" r="5" fill="none" stroke={color} strokeWidth="1.5" opacity="0.5"/>
-      <circle cx="89" cy="14" r="5" fill="none" stroke={color} strokeWidth="1.5" opacity="0.5"/>
-      {/* Door */}
-      <rect x="67" y="72" width="16" height="24" fill="none" stroke={color} strokeWidth="2"/>
+      {/* Main hospital building */}
+      <rect x="28" y="32" width="104" height="64" fill="none" stroke={color} strokeWidth="2.5" rx="2"/>
+      {/* Hospital cross — vertical */}
+      <rect x="68" y="10" width="24" height="52" fill="none" stroke={color} strokeWidth="2.5" rx="2"/>
+      {/* Hospital cross — horizontal */}
+      <rect x="52" y="24" width="56" height="24" fill="none" stroke={color} strokeWidth="2.5" rx="2"/>
+      {/* Plus sign inside cross */}
+      <line x1="80" y1="18" x2="80" y2="40" stroke={color} strokeWidth="3" opacity="0.8"/>
+      <line x1="68" y1="30" x2="92" y2="30" stroke={color} strokeWidth="3" opacity="0.8"/>
+      {/* Entrance */}
+      <rect x="68" y="72" width="24" height="24" fill="none" stroke={color} strokeWidth="2"/>
       {/* Windows */}
-      <rect x="28" y="62" width="12" height="10" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      <rect x="48" y="62" width="12" height="10" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      <rect x="95" y="62" width="12" height="10" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      <rect x="115" y="62" width="12" height="10" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      {/* Ground line */}
+      <rect x="36" y="44" width="14" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      <rect x="56" y="44" width="10" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      <rect x="94" y="44" width="10" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      <rect x="110" y="44" width="14" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      <rect x="36" y="62" width="14" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      <rect x="110" y="62" width="14" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      {/* Emergency siren */}
+      <circle cx="20" cy="20" r="8" fill="none" stroke={color} strokeWidth="1.5" opacity="0.7"/>
+      <line x1="20" y1="12" x2="20" y2="8" stroke={color} strokeWidth="2" opacity="0.7"/>
+      <line x1="26" y1="14" x2="29" y2="11" stroke={color} strokeWidth="2" opacity="0.7"/>
+      <line x1="28" y1="20" x2="32" y2="20" stroke={color} strokeWidth="2" opacity="0.7"/>
+      {/* Ground */}
       <line x1="5" y1="96" x2="155" y2="96" stroke={color} strokeWidth="1.5" opacity="0.4"/>
-      {/* Power lines */}
-      <line x1="130" y1="30" x2="150" y2="20" stroke={color} strokeWidth="1" strokeDasharray="3,2" opacity="0.5"/>
-      <line x1="150" y1="20" x2="155" y2="50" stroke={color} strokeWidth="1" strokeDasharray="3,2" opacity="0.5"/>
-      <circle cx="150" cy="20" r="3" fill={color} opacity="0.7"/>
     </svg>
   )
 
+  // Z2 — Sensitive / City skyline (commercial & residential)
   if (zoneId === 'Z2') return (
     <svg viewBox="0 0 160 100" width="160" height="100">
-      {/* City skyline — commercial zone */}
       {/* Tall central tower */}
       <rect x="58" y="14" width="28" height="82" fill="none" stroke={color} strokeWidth="2.5" rx="1"/>
       {/* Antenna */}
@@ -96,30 +99,29 @@ function ZoneIllustration({ zoneId, color }) {
     </svg>
   )
 
-  // Z3 — Critical / Hospital
+  // Z3 — Operational / Factory (industrial, least sensitive)
   return (
     <svg viewBox="0 0 160 100" width="160" height="100">
-      {/* Main hospital building */}
-      <rect x="28" y="32" width="104" height="64" fill="none" stroke={color} strokeWidth="2.5" rx="2"/>
-      {/* Hospital cross — vertical */}
-      <rect x="68" y="10" width="24" height="52" fill="none" stroke={color} strokeWidth="2.5" rx="2"/>
-      {/* Hospital cross — horizontal */}
-      <rect x="52" y="24" width="56" height="24" fill="none" stroke={color} strokeWidth="2.5" rx="2"/>
-      {/* Plus sign inside cross */}
-      <line x1="80" y1="18" x2="80" y2="40" stroke={color} strokeWidth="3" opacity="0.8"/>
-      <line x1="68" y1="30" x2="92" y2="30" stroke={color} strokeWidth="3" opacity="0.8"/>
-      {/* Entrance */}
-      <rect x="68" y="72" width="24" height="24" fill="none" stroke={color} strokeWidth="2"/>
+      {/* Factory building */}
+      <rect x="20" y="52" width="120" height="44" fill="none" stroke={color} strokeWidth="2.5" rx="2"/>
+      {/* Smokestacks */}
+      <rect x="32" y="24" width="14" height="30" fill="none" stroke={color} strokeWidth="2"/>
+      <rect x="57" y="12" width="14" height="42" fill="none" stroke={color} strokeWidth="2"/>
+      <rect x="82" y="18" width="14" height="36" fill="none" stroke={color} strokeWidth="2"/>
+      {/* Smoke puffs */}
+      <circle cx="39" cy="20" r="5" fill="none" stroke={color} strokeWidth="1.5" opacity="0.5"/>
+      <circle cx="64" cy="8"  r="5" fill="none" stroke={color} strokeWidth="1.5" opacity="0.5"/>
+      <circle cx="89" cy="14" r="5" fill="none" stroke={color} strokeWidth="1.5" opacity="0.5"/>
+      {/* Door */}
+      <rect x="67" y="72" width="16" height="24" fill="none" stroke={color} strokeWidth="2"/>
       {/* Windows */}
-      <rect x="36" y="44" width="14" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      <rect x="56" y="44" width="10" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      <rect x="94" y="44" width="10" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      <rect x="110" y="44" width="14" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      <rect x="36" y="62" width="14" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      <rect x="110" y="62" width="14" height="12" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
-      {/* Ambulance symbol */}
-      <circle cx="140" cy="85" r="8" fill="none" stroke={color} strokeWidth="1.5" opacity="0.6"/>
-      <text x="140" y="89" textAnchor="middle" fontSize="10" fill={color} opacity="0.8">🚑</text>
+      <rect x="28" y="62" width="12" height="10" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      <rect x="48" y="62" width="12" height="10" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      <rect x="95" y="62" width="12" height="10" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      <rect x="115" y="62" width="12" height="10" fill="none" stroke={color} strokeWidth="1.5" rx="1"/>
+      {/* Fault warning triangle */}
+      <polygon points="140,55 150,72 130,72" fill="none" stroke={color} strokeWidth="1.8" opacity="0.8"/>
+      <text x="140" y="70" textAnchor="middle" fontSize="10" fill={color} fontWeight="bold" opacity="0.9">!</text>
       {/* Ground */}
       <line x1="5" y1="96" x2="155" y2="96" stroke={color} strokeWidth="1.5" opacity="0.4"/>
     </svg>

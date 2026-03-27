@@ -2,9 +2,9 @@ import { ZONE_DISPLAY } from './ZoneInfoModal'
 
 // Zone positions — Z3 top-centre, Z2 bottom-left, Z1 bottom-right
 const ZONE_POS = {
-  Z3: { cx: 290, cy: 70  },
-  Z2: { cx:  85, cy: 195 },
-  Z1: { cx: 495, cy: 195 },
+  Z3: { cx: 290, cy: 90  },
+  Z2: { cx:  80, cy: 228 },
+  Z1: { cx: 500, cy: 228 },
 }
 
 // Only two links — Z3 feeds Z2 and Z1. No Z2→Z1 horizontal (removes extra arrow).
@@ -61,7 +61,7 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
       </div>
 
       <div className="zone-svg-wrap">
-        <svg viewBox="0 0 580 280" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 580 310" xmlns="http://www.w3.org/2000/svg">
           <defs>
             {/* Background dot-grid */}
             <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
@@ -90,12 +90,12 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
           </defs>
 
           {/* Background */}
-          <rect width="580" height="280" fill={svgBg} />
-          <rect width="580" height="280" fill="url(#dotGrid)" />
+          <rect width="580" height="310" fill={svgBg} />
+          <rect width="580" height="310" fill="url(#dotGrid)" />
 
           {/* Corner tags */}
-          <text x="6" y="12" className="zone-lbl" style={{ textAnchor:'start', fontSize:'7px', fill: labelText }}>TARE GRID MAP</text>
-          <text x="574" y="12" className="zone-lbl" style={{ textAnchor:'end', fontSize:'7px', fill: labelText }}>CLASSIFICATION: RESTRICTED</text>
+          <text x="6" y="16" className="zone-lbl" style={{ textAnchor:'start', fontSize:'9px', fill: labelText }}>TARE GRID MAP</text>
+          <text x="574" y="16" className="zone-lbl" style={{ textAnchor:'end', fontSize:'9px', fill: labelText }}>CLASSIFICATION: RESTRICTED</text>
 
           {/* Power lines between zones */}
           {LINKS.map(link => {
@@ -103,7 +103,7 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
             const b = ZONE_POS[link.to]
             const dx = b.cx - a.cx; const dy = b.cy - a.cy
             const len = Math.sqrt(dx*dx + dy*dy)
-            const r = 44
+            const r = 54
             const x1 = a.cx + (dx/len)*r
             const y1 = a.cy + (dy/len)*r
             const x2 = b.cx - (dx/len)*r
@@ -138,12 +138,12 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
             return (
               <g key={zone.id}>
                 {/* Outer glow ring */}
-                <circle cx={pos.cx} cy={pos.cy} r={50}
+                <circle cx={pos.cx} cy={pos.cy} r={63}
                   fill={col.fill}
                   style={{ filter: col.glow, animation: isAttacked ? 'subPulse 0.5s ease-in-out infinite' : zone.health === 'FAULT' ? 'subPulse 2s ease-in-out infinite' : 'none' }}
                 />
                 {/* Zone circle */}
-                <circle cx={pos.cx} cy={pos.cy} r={40}
+                <circle cx={pos.cx} cy={pos.cy} r={50}
                   fill={zoneFill}
                   stroke={col.stroke}
                   strokeWidth={isAttacked ? 3 : 2}
@@ -151,25 +151,25 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
                 />
 
                 {/* Zone ID — clickable */}
-                <text x={pos.cx} y={pos.cy - 6} className="zone-id-lbl zone-id-clickable" fill={col.text}
+                <text x={pos.cx} y={pos.cy - 8} className="zone-id-lbl zone-id-clickable" fill={col.text}
                   onClick={() => onZoneClick?.(zone.id)}
                   style={{ cursor: 'pointer' }}>
                   {ZONE_DISPLAY[zone.id] || zone.id}
                 </text>
                 {/* Health */}
-                <text x={pos.cx} y={pos.cy + 8} className="zone-hlth" fill={col.text} opacity={0.8}>
+                <text x={pos.cx} y={pos.cy + 12} className="zone-hlth" fill={col.text} opacity={0.8}>
                   {zone.health === 'FAULT' ? '⚠ FAULT' : isAttacked ? '⚡ ATTACKED' : '✓ HEALTHY'}
                 </text>
 
                 {/* Attack target badge */}
                 {isAttacked && (
                   <g>
-                    <rect x={pos.cx - 36} y={pos.cy - 64} width={72} height={14} rx={3}
+                    <rect x={pos.cx - 42} y={pos.cy - 78} width={84} height={16} rx={3}
                       fill="rgba(255,45,45,0.15)" stroke="rgba(255,45,45,0.6)" strokeWidth={1}
                       style={{ animation: 'subPulse 0.5s step-end infinite' }}
                     />
-                    <text x={pos.cx} y={pos.cy - 54}
-                      style={{ fontFamily:'var(--font-mono)', fontSize:'6.5px', fill:'#ff2d2d', fontWeight:700, textAnchor:'middle', letterSpacing:'0.1em' }}>
+                    <text x={pos.cx} y={pos.cy - 66}
+                      style={{ fontFamily:'var(--font-mono)', fontSize:'8.5px', fill:'#ff2d2d', fontWeight:700, textAnchor:'middle', letterSpacing:'0.1em' }}>
                       ANOMALY TARGET
                     </text>
                   </g>
@@ -181,12 +181,12 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
                   if (!ast) return null
                   const isZ3 = zone.id === 'Z3'
                   const ax = isZ3
-                    ? pos.cx + (i === 0 ? -75 : 75)   // left/right of Z3
-                    : pos.cx + (i === 0 ? -32 : 32)    // below Z2/Z1
-                  const ay = isZ3 ? pos.cy : pos.cy + 56
+                    ? pos.cx + (i === 0 ? -90 : 90)   // left/right of Z3
+                    : pos.cx + (i === 0 ? -36 : 36)    // below Z2/Z1
+                  const ay = isZ3 ? pos.cy : pos.cy + 66
                   return (
                     <g key={aid}>
-                      <rect x={ax - 30} y={ay - 12} width={60} height={24} rx={4}
+                      <rect x={ax - 33} y={ay - 13} width={66} height={26} rx={4}
                         fill={chipFill} stroke={stateColor(ast.state)} strokeWidth={1.2} />
                       <text x={ax} y={ay - 2} className="asset-lbl">{aid}</text>
                       <text x={ax} y={ay + 9} className="asset-state" fill={stateColor(ast.state)}>{ast.state}</text>
@@ -198,10 +198,10 @@ export default function ZoneObservatory({ zones, assets, accessLog, mode, darkMo
           })}
 
           {/* "RBAC boundary" label */}
-          <rect x={190} y={4} width={200} height={12} rx={3}
-            fill="rgba(0,232,124,0.06)" stroke="rgba(0,232,124,0.2)" strokeWidth={0.8} />
-          <text x={290} y={13}
-            style={{ fontFamily:'var(--font-mono)', fontSize:'6.5px', fill:'#00e87c', fontWeight:700, textAnchor:'middle', letterSpacing:'0.08em' }}>
+          <rect x={152} y={4} width={276} height={19} rx={4}
+            fill="rgba(0,232,124,0.06)" stroke="rgba(0,232,124,0.25)" strokeWidth={1} />
+          <text x={290} y={17}
+            style={{ fontFamily:'var(--font-mono)', fontSize:'9.5px', fill:'#00e87c', fontWeight:700, textAnchor:'middle', letterSpacing:'0.08em' }}>
             ACTIVE TASK: Z3 · CLEARED: ALL ZONES
           </text>
         </svg>
