@@ -4,7 +4,9 @@ import NarrativeBanner from './components/NarrativeBanner'
 import CommandGateway  from './components/CommandGateway'
 import ZoneObservatory from './components/ZoneObservatory'
 import LeftPanel       from './components/LeftPanel'
-import RightPanel      from './components/RightPanel'
+import { LiveStatsBar } from './components/RightPanel'
+import ChatAssistant   from './components/ChatAssistant'
+import ActivityFeed    from './components/ActivityFeed'
 import ZoneInfoModal   from './components/ZoneInfoModal'
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
@@ -47,14 +49,15 @@ function mkFeed(level, source, message) {
 }
 
 export default function App() {
-  const [snap,        setSnap]        = useState(INITIAL_STATE)
-  const [chatMsgs,    setChatMsgs]    = useState([])
-  const [feedItems,   setFeedItems]   = useState([])
-  const [wsConnected, setWsConnected] = useState(false)
-  const [showApprove, setShowApprove] = useState(false)
-  const [showFlash,   setShowFlash]   = useState(false)
-  const [darkMode,    setDarkMode]    = useState(() => localStorage.getItem('tare-theme') !== 'light')
-  const [zoneModal,   setZoneModal]   = useState(null)   // zone ID string or null
+  const [snap,           setSnap]           = useState(INITIAL_STATE)
+  const [chatMsgs,       setChatMsgs]       = useState([])
+  const [feedItems,      setFeedItems]      = useState([])
+  const [wsConnected,    setWsConnected]    = useState(false)
+  const [showApprove,    setShowApprove]    = useState(false)
+  const [showFlash,      setShowFlash]      = useState(false)
+  const [darkMode,       setDarkMode]       = useState(() => localStorage.getItem('tare-theme') !== 'light')
+  const [zoneModal,      setZoneModal]      = useState(null)   // zone ID string or null
+  const [scenarioActive, setScenarioActive] = useState(false)
   const wsRef      = useRef(null)
   const prevModeRef = useRef('NORMAL')
 
@@ -79,6 +82,7 @@ export default function App() {
         setChatMsgs([])
         setFeedItems([])
         setShowApprove(false)
+        setScenarioActive(false)
         addFeed('info', 'TARE', msg.message)
         break
 
@@ -154,6 +158,7 @@ export default function App() {
   }, [snap.mode])
 
   const post = (path) => fetch(path, { method:'POST' })
+  const runScenario = (path) => { setScenarioActive(true); post(path) }
 
 
   return (
@@ -171,24 +176,24 @@ export default function App() {
         <Header
           wsConnected={wsConnected}
           mode={snap.mode}
-          stats={snap.stats}
           timeboxRemaining={snap.timebox_remaining}
           timeboxTotal={snap.timebox_total}
           darkMode={darkMode}
+          scenarioActive={scenarioActive}
           onToggleTheme={() => setDarkMode(d => !d)}
-          onReset={()        => post('/reset')}
-          onAgentNormal={()        => post('/agent/normal')}
-          onAgentRogue={()         => post('/agent/rogue')}
-          onAgentImpersonator={()  => post('/agent/impersonator')}
-          onAgentCoordinated={()   => post('/agent/coordinated')}
-          onAgentEscalation={()    => post('/agent/escalation')}
-          onAgentSlowLow={()       => post('/agent/slowlow')}
+          onReset={()               => post('/reset')}
+          onAgentNormal={()         => runScenario('/agent/normal')}
+          onAgentRogue={()          => runScenario('/agent/rogue')}
+          onAgentImpersonator={()   => runScenario('/agent/impersonator')}
+          onAgentCoordinated={()    => runScenario('/agent/coordinated')}
+          onAgentEscalation={()     => runScenario('/agent/escalation')}
+          onAgentSlowLow={()        => runScenario('/agent/slowlow')}
         />
 
         <NarrativeBanner mode={snap.mode} agent={snap.agent} signals={snap.anomaly_signals} incident={snap.active_incident} />
 
         <div className="main-grid">
-          {/* LEFT COL */}
+          {/* LEFT COL — Agent / TARE / Incident tabs */}
           <div className="col-left">
             <LeftPanel
               agent={snap.agent}
@@ -199,21 +204,25 @@ export default function App() {
             />
           </div>
 
-          {/* CENTRE COL */}
-          <div className="col-centre">
+          {/* MAIN COL */}
+          <div className="col-main">
+            {/* Zone Observatory — full width */}
             <ZoneObservatory zones={snap.zones} assets={snap.assets} accessLog={snap.zone_access_log} mode={snap.mode} darkMode={darkMode} onZoneClick={setZoneModal} />
-            <CommandGateway  log={snap.gateway_log} onZoneClick={setZoneModal} />
-          </div>
 
-          {/* RIGHT COL */}
-          <div className="col-right">
-            <RightPanel
-              messages={chatMsgs}
-              feedItems={feedItems}
-              showApprove={showApprove}
-              onApprove={() => post('/approve/timebox')}
-              onDeny={()    => post('/deny/timebox')}
-            />
+            {/* Horizontal strip: Live Monitor | TARE Assistant | Activity */}
+            <div className="bottom-strip">
+              <LiveStatsBar feedItems={feedItems} stats={snap.stats} />
+              <ChatAssistant
+                messages={chatMsgs}
+                showApprove={showApprove}
+                onApprove={() => post('/approve/timebox')}
+                onDeny={()    => post('/deny/timebox')}
+              />
+              <ActivityFeed feedItems={feedItems} />
+            </div>
+
+            {/* Command Gateway — full width */}
+            <CommandGateway log={snap.gateway_log} onZoneClick={setZoneModal} />
           </div>
         </div>
       </div>

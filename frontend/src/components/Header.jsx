@@ -24,8 +24,8 @@ const SCENARIOS = [
   { label: '🎯 Coord',      cls: 'hbtn-ai-purple', title: 'Coordinated multi-agent attack',    key: 'coordinated' },
 ]
 
-export default function Header({ wsConnected, mode, stats, timeboxRemaining, timeboxTotal,
-  darkMode, onToggleTheme,
+export default function Header({ wsConnected, mode, timeboxRemaining, timeboxTotal,
+  darkMode, onToggleTheme, scenarioActive,
   onReset, onAgentNormal, onAgentRogue, onAgentImpersonator,
   onAgentCoordinated, onAgentEscalation, onAgentSlowLow }) {
   const [now, setNow] = useState(new Date())
@@ -67,20 +67,17 @@ export default function Header({ wsConnected, mode, stats, timeboxRemaining, tim
         )}
       </div>
 
-      {/* Stats strip */}
-      <div className="hdr-stats">
-        <span className="stat-chip"><b>{stats?.total ?? 0}</b> CMDS</span>
-        <span className="stat-chip ok"><b>{stats?.allowed ?? 0}</b> ALLOW</span>
-        <span className="stat-chip bad"><b>{stats?.denied ?? 0}</b> DENY</span>
-        <span className="stat-chip warn"><b>{stats?.freeze_events ?? 0}</b> FRZ</span>
-      </div>
-
       {/* Controls */}
       <div className="hdr-controls">
         {/* Scenarios dropdown */}
         <div className="scenario-dd" ref={ddRef}>
-          <button className="hbtn hbtn-dd" disabled={!wsConnected} onClick={() => setDdOpen(o => !o)}>
-            ▶ Demo Scenarios {ddOpen ? '▲' : '▼'}
+          <button
+            className="hbtn hbtn-dd"
+            disabled={!wsConnected || scenarioActive}
+            title={scenarioActive ? 'Scenario running — click Reset to stop' : 'Choose a demo scenario'}
+            onClick={() => !scenarioActive && setDdOpen(o => !o)}
+          >
+            {scenarioActive ? '⏳ Running…' : `▶ Demo Scenarios ${ddOpen ? '▲' : '▼'}`}
           </button>
           {ddOpen && (
             <div className="dd-menu">

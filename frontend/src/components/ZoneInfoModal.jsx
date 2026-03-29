@@ -1,6 +1,13 @@
 // Zone display names and rich info for non-technical audiences
 export const ZONE_DISPLAY = { Z1: 'Zone 1', Z2: 'Zone 2', Z3: 'Zone 3' }
 
+// Real photo paths served from /public/zones/
+const ZONE_PHOTO = {
+  Z1: '/zones/z1.jpeg',
+  Z2: '/zones/z2.png',
+  Z3: '/zones/z3.png',
+}
+
 export const ZONE_INFO = {
   Z1: {
     display:     'Zone 1 — North Grid',
@@ -132,34 +139,55 @@ export default function ZoneInfoModal({ zoneId, zones, assets, onClose }) {
   if (!zoneId) return null
   const info   = ZONE_INFO[zoneId]
   if (!info) return null
-  const zState = zones?.[zoneId] || {}
+  const zState  = zones?.[zoneId] || {}
   const isFault = zState.health === 'FAULT'
+  const faultMsg = zState.fault || null
+  const photoSrc = ZONE_PHOTO[zoneId]
 
   return (
     <div className="zone-modal-overlay" onClick={onClose}>
-      <div className="zone-modal" onClick={e => e.stopPropagation()}>
+      <div className="zone-modal zone-modal-vertical" onClick={e => e.stopPropagation()}>
 
         {/* Close */}
         <button className="zone-modal-close" onClick={onClose}>✕</button>
 
-        {/* Illustration */}
-        <div className="zone-modal-illustration" style={{ borderColor: info.typeColor + '44', background: info.typeColor + '0d' }}>
-          <ZoneIllustration zoneId={zoneId} color={info.typeColor} />
+        {/* Real photo */}
+        {photoSrc && (
+          <div className="zone-modal-photo">
+            <img src={photoSrc} alt={info.display} />
+            <div className="zone-modal-photo-label">{info.region}</div>
+          </div>
+        )}
+
+        {/* SVG illustration + header inline */}
+        <div className="zone-modal-top-row">
+          <div className="zone-modal-illustration-sm" style={{ borderColor: info.typeColor + '44', background: info.typeColor + '0d' }}>
+            <ZoneIllustration zoneId={zoneId} color={info.typeColor} />
+          </div>
+          <div className="zone-modal-header">
+            <div className="zone-modal-name">{info.display}</div>
+            <div className="zone-modal-badges">
+              <span className="zone-modal-type" style={{ borderColor: info.typeColor + '80', color: info.typeColor, background: info.typeColor + '18' }}>
+                {info.type} Zone
+              </span>
+              <span className={`zone-modal-status ${isFault ? 'zms-fault' : 'zms-ok'}`}>
+                {isFault ? '⚠ FAULT ACTIVE' : '✓ HEALTHY'}
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Header */}
-        <div className="zone-modal-header">
-          <div className="zone-modal-name">{info.display}</div>
-          <div className="zone-modal-badges">
-            <span className="zone-modal-type" style={{ borderColor: info.typeColor + '80', color: info.typeColor, background: info.typeColor + '18' }}>
-              {info.type} Zone
-            </span>
-            <span className={`zone-modal-status ${isFault ? 'zms-fault' : 'zms-ok'}`}>
-              {isFault ? '⚠ FAULT ACTIVE' : '✓ HEALTHY'}
-            </span>
+        {/* Active fault alert */}
+        {isFault && faultMsg && (
+          <div className="zone-modal-fault-alert">
+            <div className="zmfa-title">⚡ Active Fault Detected</div>
+            <div className="zmfa-msg">{faultMsg}</div>
+            <div className="zmfa-impact">
+              The AI agent has been tasked to investigate and restore this zone.
+              TARE is monitoring all commands issued against this zone in real time.
+            </div>
           </div>
-          <div className="zone-modal-region">{info.region}</div>
-        </div>
+        )}
 
         {/* Description */}
         <div className="zone-modal-section">

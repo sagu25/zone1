@@ -11,13 +11,12 @@ const SRC_META = {
   ML:         { icon: '🧠', label: 'ML',       cls: 'ls-ml',      desc: 'ML anomaly detection — IsolationForest + RandomForest' },
 }
 
-function LiveStatsBar({ feedItems }) {
+export function LiveStatsBar({ feedItems, stats }) {
   const counts = useMemo(() => {
     const c = {}
     feedItems.forEach(f => {
       const src = f.source
       c[src] = (c[src] || 0) + 1
-      // Count ML_ANOMALY signals embedded in GATEWAY decisions
       if (src === 'GATEWAY' && f.message?.includes('ML_ANOMALY')) {
         c['ML'] = (c['ML'] || 0) + 1
       }
@@ -28,8 +27,20 @@ function LiveStatsBar({ feedItems }) {
   const latest = feedItems[0]
 
   return (
-    <div className="live-stats-bar">
-      <div className="ls-header">LIVE EVENT MONITOR</div>
+    <div className="panel live-monitor-panel">
+      <div className="panel-title"><span className="panel-icon">📡</span> Live Event Monitor</div>
+
+      {/* Session stats row */}
+      {stats && (
+        <div className="ls-session-stats">
+          <span className="ls-stat-chip ls-sc-total" title="Total commands"><b>{stats.total ?? 0}</b><span>CMDS</span></span>
+          <span className="ls-stat-chip ls-sc-allow" title="Allowed"><b>{stats.allowed ?? 0}</b><span>ALLOW</span></span>
+          <span className="ls-stat-chip ls-sc-deny"  title="Denied"><b>{stats.denied ?? 0}</b><span>DENY</span></span>
+          <span className="ls-stat-chip ls-sc-frz"   title="Freeze events"><b>{stats.freeze_events ?? 0}</b><span>FRZ</span></span>
+        </div>
+      )}
+
+      {/* Source event counts */}
       <div className="ls-counts">
         {Object.entries(SRC_META).map(([src, meta]) => (
           <span key={src} className={`ls-chip ${meta.cls}`} title={meta.desc}>
@@ -39,6 +50,8 @@ function LiveStatsBar({ feedItems }) {
           </span>
         ))}
       </div>
+
+      {/* Latest event */}
       <div className="ls-latest-wrap">
         <span className="ls-latest-label">LATEST</span>
         {latest ? (
